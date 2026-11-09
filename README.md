@@ -1,6 +1,6 @@
-# claude-lanes
+# Claude Lanes: Parallel Agents
 
-Run a project with four Claude Code sessions at once: a **coordinator** you talk to, and three **lanes** (A, B, C) that each work their own area in their own git worktree. They share a small folder of plain text files (the plan, the rules, one status file per session), so any session can be restarted without losing its place.
+`claude-lanes` runs a project with four Claude Code sessions at once: a **coordinator** you talk to, and three **lanes** (A, B, C) that each work their own area in their own git worktree. They share a small folder of plain text files (the plan, the rules, one status file per session), so any session can be restarted without losing its place.
 
 This repo ships the workflow (a setup guide, templates and start commands) and a **local dashboard**: one page that shows what needs you, what's ready to merge, your chat with the coordinator, and what every session is doing.
 

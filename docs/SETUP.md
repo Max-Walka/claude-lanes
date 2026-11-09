@@ -1,4 +1,4 @@
-# Parallel agents: setup for any project
+# Claude Lanes: Parallel Agents
 
 Four Claude Code sessions work on one project together: a coordinator you talk to, and three lanes that do the work. To set it up on any project, clone this repo, open Claude Code in your project, paste the message under "Set it up" with your details filled in, and Claude builds the rest.
 
@@ -76,6 +76,7 @@ Set up parallel agents for this project. Follow the "For Claude" section of
 Project name (short, one word): ___
 What we're doing and by when: ___
 My name, as the sessions should address me: ___
+Use the dashboard? (yes/no): ___
 
 Lane A works on: ___
 Lane B works on: ___
