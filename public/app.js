@@ -71,16 +71,17 @@ const ago = (t, prefix = '') => h('span', { dataset: { ago: String(t ?? ''), pre
 // Text with `code` spans and #123 PR links, all as text nodes.
 function richText(text) {
   const out = [];
-  const re = /`([^`]+)`|#(\d{2,7})\b/g;
+  const re = /`([^`]+)`|(https?:\/\/[^\s<>"'`]+[^\s<>"'`.,;:!?)\]])|#(\d{2,7})\b/g;
   const str = noEmDash(text);
   let last = 0;
   let m;
   while ((m = re.exec(str))) {
     if (m.index > last) out.push(str.slice(last, m.index));
     if (m[1] != null) out.push(h('code', null, m[1]));
+    else if (m[2] != null) out.push(h('a', { href: m[2], target: '_blank', rel: 'noreferrer' }, m[2]));
     else {
-      const pr = state?.prs?.[m[2]];
-      out.push(pr && pr.ok && pr.url ? h('a', { href: pr.url, target: '_blank', rel: 'noreferrer' }, `#${m[2]}`) : `#${m[2]}`);
+      const pr = state?.prs?.[m[3]];
+      out.push(pr && pr.ok && pr.url ? h('a', { href: pr.url, target: '_blank', rel: 'noreferrer' }, `#${m[3]}`) : `#${m[3]}`);
     }
     last = re.lastIndex;
   }
@@ -497,13 +498,36 @@ function ownerOf(n) {
   return null;
 }
 
+// The plain name for a PR: the newest Coordinator merge-order label, else the GitHub title.
+function prLabel(n) {
+  const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator' && u.labels?.[n]);
+  return mo ? noEmDash(mo.labels[n]) : null;
+}
+
+// Open to dos for a PR, newest first. after:"merge" ones are what to check once it merges.
+function prTodos(n) {
+  const closed = new Set(todoModel().closed.map((c) => c.t.id));
+  const seen = new Set();
+  return state.updates.filter((u) => u.kind === 'todo' && u.pr === n && u.id && !closed.has(u.id) && !seen.has(u.id) && seen.add(u.id));
+}
+
+function todoBlock(t, idPrefix) {
+  return h('div', { class: 'r-todo' }, cardBody(t, { clampId: `${idPrefix}:${t.id}`, rerender: renderReady }));
+}
+
 function readyRow(n, ord) {
   const p = state.prs?.[n];
   const owner = ownerOf(n);
-  const readyLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator') || state.updates.find((u) => u.kind === 'ready' && u.pr === n);
-  const title = p && p.ok ? shortTitle(p.title) : (readyLine ? noEmDash(readyLine.text).slice(0, 80) : '');
+  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
+  // What it does: the Coordinator's latest ready line for this PR (plain words, no file names).
+  const coordLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey === 'coordinator');
+  const title = prLabel(n) || (p && p.ok ? shortTitle(p.title) : (laneLine ? noEmDash(laneLine.text).slice(0, 80) : ''));
+  const todos = prTodos(n);
+  const afterMerge = todos.filter((t) => t.after === 'merge');
+  const before = todos.filter((t) => t.after !== 'merge');
   const id = `ready:${n}`;
-  return h('details', { class: 'ready', open: expanded.has(id) ? true : null, ontoggle: (e) => { e.target.open ? expanded.add(id) : expanded.delete(id); } },
+  const section = (label, kids) => h('div', { class: 'r-sec' }, h('div', { class: 'r-label' }, label), kids);
+  return h('details', { class: 'ready', open: expanded.has(id) ? true : null, ontoggle: (e) => { const was = expanded.has(id); e.target.open ? expanded.add(id) : expanded.delete(id); if (was !== e.target.open) renderReady(); } },
     h('summary', null,
       h('span', { class: 'ord' }, ord == null ? '' : String(ord)),
       h('span', { class: 'r-top' },
@@ -513,26 +537,33 @@ function readyRow(n, ord) {
         owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
         ciMini(p))),
     h('div', { class: 'ready-body' },
-      p && p.ok ? h('div', null, p.threads == null ? '' : p.threads === 1 ? '1 open review thread' : `${p.threads} open review threads`, ' · ', h('a', { href: p.url, target: '_blank', rel: 'noreferrer' }, 'Open on GitHub')) : null,
-      readyLine ? h('div', { class: 'msg-text' }, richText(readyLine.text)) : null,
-      readyLine ? h('div', null, `Reported ${fmtTime(readyLine.t)} by ${readyLine.from}`) : null));
+      section('What it does', coordLine ? h('div', { class: 'msg-text blk' }, block(coordLine.text)) : h('div', { class: 'muted' }, 'No summary from the Coordinator yet.')),
+      before.length ? section('Before you merge', before.map((t) => todoBlock(t, 'rb'))) : null,
+      afterMerge.length ? section('Check on staging after merging', afterMerge.map((t) => todoBlock(t, 'ra'))) : null,
+      p?.url ? h('a', { href: p.url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null));
 }
 
 function renderReady() {
   const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator');
-  const ordered = (mo ? mo.prs : []).filter((n) => !isGone(n));
+  // Exactly the latest merge order, keeping its numbers (a merged PR drops out, the others keep theirs).
+  const ordered = (mo ? mo.prs.map((n, i) => ({ n, ord: i + 1 })) : []).filter((x) => !isGone(x.n));
+  const orderedNums = ordered.map((x) => x.n);
   const readySet = [...new Set(state.needs.ready.map((r) => r.pr))].filter((n) => !isGone(n));
-  const rest = readySet.filter((n) => !ordered.includes(n));
+  const rest = readySet.filter((n) => !orderedNums.includes(n));
   const nodes = [];
-  // A todo waiting on a ready PR shows as a small line under that PR's row.
+  // A todo waiting on a ready PR shows as a line under that PR's row; click it for the full todo.
   const waiting = todoModel().waiting;
   const row = (n, ord) => {
     nodes.push(readyRow(n, ord));
+    if (expanded.has(`ready:${n}`)) return; // the open row already shows these in full
     for (const t of waiting.filter((x) => x.pr === n)) {
-      nodes.push(h('div', { class: 'after-note', title: noEmDash(t.title || t.text) }, h('b', null, `After #${n} merges: `), noEmDash(t.title || t.text)));
+      const id = `after:${t.id}`;
+      nodes.push(h('details', { class: 'after-note', open: expanded.has(id) ? true : null, ontoggle: (e) => { e.target.open ? expanded.add(id) : expanded.delete(id); } },
+        h('summary', null, h('b', null, `After #${n} merges: `), h('span', { class: 'an-title' }, noEmDash(t.title || splitTitle(t).title || t.text))),
+        h('div', { class: 'an-body' }, cardBody(t, { clampId: `ax:${t.id}`, rerender: renderReady }))));
     }
   };
-  ordered.forEach((n, i) => row(n, i + 1));
+  ordered.forEach((x) => row(x.n, x.ord));
   if (rest.length) {
     if (ordered.length) nodes.push(h('div', { class: 'unordered-head' }, 'Not in the order yet'));
     rest.forEach((n) => row(n, null));

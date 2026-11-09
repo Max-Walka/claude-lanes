@@ -70,3 +70,10 @@ test('CI and Greptile', () => {
 test('local ISO timestamp has an offset', () => {
   assert.match(localIso(new Date()), /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
 });
+
+test('merge-order labels', async () => {
+  const { normaliseUpdate } = await import('../lib/parse.js');
+  const u = normaliseUpdate({ kind: 'merge-order', from: 'Coordinator', prs: [5, 7], labels: { 5: ' Pay by card ', '#7': 'Search', x: 'bad', 9: 3 } });
+  assert.deepEqual(u.labels, { 5: 'Pay by card', 7: 'Search' });
+  assert.deepEqual(normaliseUpdate({ kind: 'merge-order', labels: ['no'] }).labels, {});
+});

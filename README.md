@@ -48,7 +48,7 @@ Needs Node 20 or later. For live PR state (CI, review score, open threads, merge
 Everything fits on one screen; each column scrolls inside itself. Under about 1000px wide the columns become tabs.
 
 - **Left: Needs you.** One list. "Decide" cards are the coordinator's questions, with option buttons and a reply box. "To do" cards are follow-ups for you, with numbered steps and a Done button. The panel gets an accent border and a count when anything is waiting.
-- **Left: Ready to merge.** One row per PR, numbered in the coordinator's merge order, with the short title, owning lane, CI and review score. The PR number links to GitHub. A to do that waits for a PR shows as a small "After #N merges" line under its row. The header counts how many of your open PRs are ready.
+- **Left: Ready to merge.** One row per PR, in exactly the coordinator's latest merge order with its numbers, showing the plain name from the merge order's `labels` (else the GitHub title), owning lane, CI and review score. The PR number links to GitHub. Open a row for: what it does (the coordinator's latest `ready` line for it), anything to do before merging (its to dos without `after`), what to check on staging (its `after:"merge"` to dos) and the GitHub link. A to do that waits for a PR also shows as an "After #N merges" line under its row; click it for the full to do. The header counts how many of your open PRs are ready.
 - **Centre: the chat.** You and the coordinator, including what you type in its terminal (tagged "terminal"). Your latest message stays pinned at the top until the coordinator replies. Type, dictate with the mic (Web Speech API, in Edge and Chrome), or paste or drop screenshots.
 - **Right: Sessions.** One card per session: its state, its "Now" line and open PR count. A lane whose status file has a `State` line shows Working (with a rough "~N min left" and how long it has been on the task), Needs decision (amber, with the question and when it will block), Blocked (red) or Stopped (needs a restart); click it to expand its task, start time, ETA, open PRs and what it finished today, with how long each took. Older status files without `State` show a dot (red blocked, blue waiting on you, green working). A card fades when its status file is over an hour old. The full status file, PRs and messages open in a drawer. The status file format is in `templates/status-file.md`. Below: **Lane activity**, every lane update, newest first.
 - **Menu:** `plan.md`, `rules.md`, `coordinator-rules.md`, read-only.
@@ -65,7 +65,7 @@ One JSON object per line. `ts` comes from the real clock, with an offset.
 {"ts":"2026-01-15T09:40:00+13:00","from":"Lane A","to":"Coordinator","kind":"ready","pr":212,"text":"PR #212 ready: payment step on the new API."}
 {"ts":"2026-01-15T09:12:00+13:00","id":"q-0115-reindex","from":"Coordinator","to":"Sam","kind":"question","about":"Lane B","title":"Reindex staging search now, or wait for tonight?","text":"Lane B's tests need data in the staging index.","options":["Reindex now","Wait for tonight"]}
 {"ts":"2026-01-15T09:50:00+13:00","id":"todo-0115-keys","from":"Coordinator","to":"Sam","kind":"todo","about":"Lane A","pr":212,"after":"merge","title":"Switch staging to the new payment keys","text":"Checkout fails on staging without them.","steps":["Open the staging environment variables","Set PAYMENTS_API_KEY","Redeploy staging"]}
-{"ts":"2026-01-15T09:44:00+13:00","from":"Coordinator","to":"Sam","kind":"merge-order","prs":[212,209],"note":"#212 first"}
+{"ts":"2026-01-15T09:44:00+13:00","from":"Coordinator","to":"Sam","kind":"merge-order","prs":[212,209],"note":"#212 first","labels":{"212":"Pay by card on the new checkout","209":"Search uses the new index"}}
 {"ts":"2026-01-15T08:41:00+13:00","id":"t-0115-0841","kind":"chat","from":"Sam","source":"terminal","to":"Coordinator","text":"What's closest to ready?"}
 {"ts":"2026-01-15T08:42:00+13:00","from":"Coordinator","to":"Sam","kind":"chat","replyTo":"t-0115-0841","text":"#212, the payment step."}
 {"ts":"2026-01-15T10:50:00+13:00","from":"Coordinator","to":"Sam","kind":"done","replyTo":"q-0115-reindex"}
@@ -73,16 +73,16 @@ One JSON object per line. `ts` comes from the real clock, with an offset.
 
 | `kind` | Meaning | Shown |
 | --- | --- | --- |
-| `ready` | A PR is ready for you (`pr`) | Ready to merge, Lane activity |
+| `ready` | A PR is ready for you (`pr`). The coordinator's own `ready` line for a PR, in plain words, is its "What it does" | Ready to merge, Lane activity |
 | `blocked`, `info` | News | Chat if from the coordinator to you; Lane activity if from a lane |
 | `chat` | A chat message; `from` you with `source:"terminal"` mirrors your terminal | Chat |
 | `question` | A decision (`id`, `about`, `title`, `text`, `options`) | Needs you, as a Decide card |
 | `todo` | A follow-up (`id`, `about`, `pr`, `after:"merge"`, `title`, `text`, `steps`) | Needs you, as a To do card; with `after:"merge"`, once `pr` merges |
-| `merge-order` | The merge order (`prs`, `note`); the latest one wins | Numbers the Ready to merge rows |
+| `merge-order` | The merge order (`prs`, `note`, optional `labels`: PR number to a plain one-line name); the latest one wins | Orders and numbers the Ready to merge rows, and names them |
 | `done` | Settles the question or to do whose `id` is `replyTo` | Greys it out, moves it to "Recently done" |
 
 - `about` names the session a card concerns ("Lane A", or "Coordinator"); it turns that session's dot blue while a question is open.
-- `steps` items may hold `"\n- "` sub-bullets. Chat text renders line breaks and `- ` bullets.
+- `steps` items may hold `"\n- "` sub-bullets. Chat text renders line breaks and `- ` bullets. `http` and `https` addresses become links.
 - A coordinator line with `replyTo` set to one of your message ids is a reply to it and unpins it.
 - Unknown fields are ignored. Lines that are not JSON objects are skipped.
 
