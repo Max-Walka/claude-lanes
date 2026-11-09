@@ -1,0 +1,11 @@
+{
+  "port": 4317,
+  "person": "Sam",
+  "projects": [
+    {
+      "name": "acme",
+      "lanesFolder": "~/.claude/lanes/acme",
+      "repoFolder": "~/code/acme"
+    }
+  ]
+}

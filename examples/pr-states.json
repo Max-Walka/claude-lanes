@@ -1,0 +1,9 @@
+{
+  "prs": {
+    "209": { "title": "feat(search): results page on the new index", "url": "https://github.com/acme/storefront/pull/209", "state": "OPEN", "draft": false, "ci": "pending", "checks": [{ "name": "test", "bucket": "pending" }], "greptile": 4, "threads": 1 },
+    "212": { "title": "feat(checkout): payment step on the new API", "url": "https://github.com/acme/storefront/pull/212", "state": "OPEN", "draft": false, "ci": "pass", "checks": [{ "name": "test", "bucket": "pass" }], "greptile": 5, "threads": 0 },
+    "214": { "title": "feat(api): orders endpoint with cursor pagination", "url": "https://github.com/acme/storefront/pull/214", "state": "OPEN", "draft": false, "ci": "pass", "checks": [{ "name": "test", "bucket": "pass" }], "greptile": 5, "threads": 0 },
+    "215": { "title": "feat(checkout): card error messages", "url": "https://github.com/acme/storefront/pull/215", "state": "OPEN", "draft": false, "ci": "pending", "checks": [{ "name": "test", "bucket": "pending" }], "greptile": null, "threads": 0 }
+  },
+  "openMine": { "count": 4, "numbers": [209, 212, 214, 215] }
+}

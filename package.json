@@ -1,0 +1,23 @@
+{
+  "name": "claude-lanes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A coordinator and three lanes of Claude Code sessions working one project, with a local dashboard to watch and answer them.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/demo.mjs",
+    "test": "node --test",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "marked": "^15.0.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.48.0"
+  },
+  "license": "MIT"
+}

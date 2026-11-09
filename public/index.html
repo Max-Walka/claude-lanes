@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Lanes</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='3' width='3' height='10' rx='1.5' fill='%237c6fd6'/%3E%3Crect x='5' y='3' width='3' height='10' rx='1.5' fill='%232f9e8f'/%3E%3Crect x='9' y='3' width='3' height='10' rx='1.5' fill='%23d08a2e'/%3E%3Crect x='13' y='3' width='2' height='10' rx='1' fill='%23d0607a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="brand-name">Lanes</span>
+      <span id="project-slot"></span>
+    </div>
+    <div class="topbar-right">
+      <span class="live" id="live" title="Connection to the local server"><i></i><span>Connecting</span></span>
+      <div class="menu-wrap">
+        <button type="button" class="icon-btn" id="menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" title="Plan and rules" aria-label="Plan and rules">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="menu" id="menu" role="menu" hidden></div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Panels">
+    <button type="button" role="tab" data-tab="left" aria-controls="col-left">Needs you <span class="tab-count" id="tab-count" hidden></span></button>
+    <button type="button" role="tab" data-tab="chat" aria-controls="col-chat">Chat</button>
+    <button type="button" role="tab" data-tab="right" aria-controls="col-right">Sessions</button>
+  </nav>
+
+  <div class="app" id="app">
+    <section class="col col-left" id="col-left" aria-label="Needs you and ready to merge">
+      <div class="panel needs-panel" id="needs-panel">
+        <div class="panel-head">
+          <h2>Needs you</h2>
+          <span class="count" id="needs-count" hidden></span>
+        </div>
+        <div class="panel-body" id="needs-list"></div>
+      </div>
+      <div class="panel ready-panel">
+        <div class="panel-head">
+          <h2>Ready to merge <span class="ready-count" id="ready-count"></span></h2>
+          <span class="pr-refresh"><span id="pr-age" class="muted small"></span><button type="button" class="btn quiet small-btn" id="pr-refresh">Refresh</button></span>
+        </div>
+        <div class="panel-body" id="ready-list"></div>
+      </div>
+    </section>
+
+    <main class="col col-chat" id="col-chat" aria-label="Chat with the Coordinator">
+      <div class="chat-top">
+        <div id="banner"></div>
+        <div id="pinned"></div>
+      </div>
+      <div class="chat-scroll" id="chat-scroll" tabindex="-1">
+        <div class="chat-list" id="chat-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+      </div>
+      <button type="button" class="jump" id="jump" hidden>New messages</button>
+      <div class="chat-input" id="chat-input"></div>
+    </main>
+
+    <aside class="col col-right" id="col-right" aria-label="Sessions and lane activity">
+      <div class="panel sessions-panel">
+        <div class="panel-head"><h2>Sessions</h2></div>
+        <div class="session-cards" id="session-cards"></div>
+      </div>
+      <div class="panel activity-panel">
+        <div class="panel-head"><h2>Lane activity</h2></div>
+        <div class="panel-body" id="activity"></div>
+      </div>
+    </aside>
+  </div>
+
+  <dialog id="drawer" class="drawer" aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <h2 id="drawer-title"></h2>
+      <button type="button" class="btn quiet" id="drawer-close">Close</button>
+    </div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </dialog>
+
+  <dialog id="doc" class="doc-dialog" aria-labelledby="doc-title">
+    <div class="doc-head">
+      <h2 id="doc-title"></h2>
+      <button type="button" class="btn quiet" id="doc-close">Close</button>
+    </div>
+    <div id="doc-body" class="prose"></div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

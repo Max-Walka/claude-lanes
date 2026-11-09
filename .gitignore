@@ -1,0 +1,4 @@
+node_modules/
+# Local config and notes (they name real projects and folders)
+config.json
+*.local.md
