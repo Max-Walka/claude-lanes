@@ -4,23 +4,33 @@ One short file per session in the lanes folder: `coordinator.md`, `lane-a.md`, `
 
 ## Lane status file (`lane-a.md`, `lane-b.md`, `lane-c.md`)
 
-Exactly these keys, one per line. `Handoff` may run over several lines (indent the extra lines).
+Exactly these keys, one per line. `Done today` and `Handoff` may run over several lines (indent the extra lines).
 
 ```
 Updated: <date and time>
+State: <Working | Needs decision | Blocked | Stopped>
 Now: <current task, one line>
+Started: <ISO time the current task started>
+ETA: <rough time left, e.g. ~40 min; base it on Done today lines for similar work>
+Decision: <none | the question id, and "blocked in ~N h" = when you run out of other work without it>
 Branch: <current branch>
 Open PRs: #123 (state), #124 (state)
 Files claimed: <shared files you are editing that another lane might touch>
 Blocked on: <none | what, and who>
 Needs from other lanes: <none | what>
+Done today:
+  - <task> | <#PR or none> | started HH:MM | finished HH:MM | took Nh Nm   (one line each, newest first)
 Handoff: <the half-finished step, and anything the next session must know>
 ```
 
 The dashboard reads these keys:
 
+- `State` sets the card's look: Working (green dot), Needs decision (amber card), Blocked (red card), Stopped (grey dashed card, "Needs a restart"). Working = has a task. Needs decision = working, but a later task waits on an answer. Blocked = nothing left to do without the answer. Stopped = handed off, needs a restart.
+- `ETA` shows on a Working card as "Working, ~40 min left" (the first estimate in the line; labelled rough), with the time since `Started`.
+- `Decision` shows on a Needs decision card: the question's title (looked up by id) and "Blocked in ~N h".
+- Click a card with these fields to expand it: Now, Started, ETA, open PRs, then Done today with how long each took.
 - `Now` is the line on the session's card.
-- `Blocked on` other than `none` turns the card's dot red ("Blocked").
+- Boards without `State` fall back: `Blocked on` other than `none` turns the card's dot red ("Blocked"), and an open question about the lane turns it blue ("Waiting on you").
 - `Open PRs` gives the card's open PR count; `#123` numbers become live PR rows in the drawer.
 - The file's last-modified time is the card's age. A card fades when the file is over an hour old.
 

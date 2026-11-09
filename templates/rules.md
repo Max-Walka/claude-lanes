@@ -20,15 +20,21 @@
 Overwrite it, never append. Keep it under about 20 lines, in this shape:
 ```
 Updated: <date and time>
+State: <Working | Needs decision | Blocked | Stopped>
 Now: <current task, one line>
+Started: <ISO time the current task started>
+ETA: <rough time left, e.g. ~40 min; base it on Done today lines for similar work, not a guess>
+Decision: <none | the question id, and "blocked in ~N h" = when you run out of other work without it>
 Branch: <current branch>
 Open PRs: #123 (state), #124 (state)
 Files claimed: <paths you are editing that another lane might touch>
-Blocked on: <none | what, and who>
+Blocked on: <none | what, and who>  (only when there is nothing else you can do)
 Needs from other lanes: <none | what>
+Done today: <task | PR | started HH:MM | finished HH:MM | took Nh Nm>, one line each, newest first
 Handoff: <the half-finished step, anything learned that the next session needs>
 ```
-Update it when your task, PRs, claims or blockers change. Read the others before starting each task.
+States: Working = has a task. Needs decision = working, but waiting on an answer for a later task; say when that turns into Blocked. Blocked = nothing left to do without the answer. Stopped = handed off, needs a restart.
+Update it when your task, state, PRs, claims or blockers change, and at least every hour while working (refresh ETA). Read the others before starting each task.
 
 ## Git and PRs
 - Each PR: its own branch off `origin/main`, created inside your worktree.

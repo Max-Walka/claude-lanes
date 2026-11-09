@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localIso } from '../lib/parse.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = path.join(root, 'examples', 'demo-lanes');
@@ -23,6 +24,17 @@ for (const f of files) {
     return JSON.stringify(o);
   });
   fs.writeFileSync(f, out.join('\n') + '\n');
+}
+
+// Board times: {{ago N}} becomes the local time N minutes ago (ISO), {{hm N}} its HH:MM.
+const pad = (n) => String(n).padStart(2, '0');
+for (const f of ['lane-a.md', 'lane-b.md', 'lane-c.md']) {
+  const file = path.join(dir, f);
+  const text = fs.readFileSync(file, 'utf8').replace(/\{\{(ago|hm) (\d+)\}\}/g, (_, kind, n) => {
+    const d = new Date(Date.now() - Number(n) * 60_000);
+    return kind === 'hm' ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : localIso(d);
+  });
+  fs.writeFileSync(file, text);
 }
 
 // Status files: recent, except Lane C, which has been quiet for a while.

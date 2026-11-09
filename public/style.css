@@ -243,11 +243,38 @@ button { font: inherit; color: inherit; }
 
 /* ---------- sessions (right) ---------- */
 .session-cards { display: grid; gap: 6px; }
-.scard {
-  display: grid; gap: 2px; text-align: left; width: 100%; cursor: pointer; padding: 8px 10px; border-radius: var(--radius);
-  background: var(--surface); border: 1px solid var(--line); color: var(--text);
-}
+.scard { border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); color: var(--text); }
 .scard:hover { border-color: var(--line-strong); }
+.scard-main {
+  display: grid; gap: 2px; text-align: left; width: 100%; cursor: pointer; padding: 8px 10px; border-radius: var(--radius);
+  background: none; border: 0; color: inherit; font: inherit;
+}
+/* Board State looks: Working (green dot), Needs decision (amber card), Blocked (red card), Stopped (grey, dashed). */
+.scard.s-decision { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.scard.s-blocked { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.scard.s-stopped { border-style: dashed; background: var(--surface-2); }
+.scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
+.scard-head .state.s-stopped { color: var(--text-3); font-weight: 500; }
+.scard-head .state.s-working { color: var(--ok); }
+.sdot.s-decision { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.sdot.s-stopped { background: transparent; border: 1.5px solid var(--text-3); }
+.scard-meta { font-size: 12px; color: var(--text-3); }
+.scard-blocked { font-size: 12px; color: var(--bad); overflow-wrap: anywhere; }
+.scard-decision { font-size: 12px; display: grid; gap: 1px; margin-top: 2px; padding: 5px 8px; border-radius: 6px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.scard-decision .dq { color: var(--text); overflow-wrap: anywhere; }
+.scard-decision .din { color: var(--warn); font-weight: 600; }
+.scard-more { display: grid; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--line); font-size: 12px; }
+.scard-more .kv { display: grid; grid-template-columns: 62px 1fr; gap: 6px; }
+.scard-more .k { color: var(--text-3); }
+.scard-more .v { color: var(--text); overflow-wrap: anywhere; white-space: pre-line; }
+.scard-more .pr-links { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.scard-more .gone { color: var(--text-3); }
+.done-today { display: grid; gap: 4px; margin-top: 2px; }
+.done-today ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.done-today li { display: grid; gap: 1px; padding-left: 8px; border-left: 2px solid var(--line-strong); }
+.done-today .dt-task { color: var(--text); overflow-wrap: anywhere; }
+.done-today .dt-meta { color: var(--text-3); }
+.done-today .dt-meta b { color: var(--text-2); font-weight: 600; }
 .scard-head { display: flex; align-items: center; gap: 7px; }
 .scard-head .name { font-weight: 600; }
 .scard-head .state { font-size: 12px; color: var(--text-2); margin-left: auto; white-space: nowrap; }

@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import {
-  SESSIONS, parseLaneStatus, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
+  SESSIONS, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
   sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey,
 } from './lib/parse.js';
 import { fetchPrStates, fetchOpenMine } from './lib/gh.js';
@@ -128,6 +128,7 @@ async function buildState(i) {
       entry.fields = parsed.fields;
       entry.order = parsed.order;
       entry.extra = parsed.extra;
+      entry.board = parseBoard(parsed.fields);
     }
     sessions[sess.key] = entry;
   }

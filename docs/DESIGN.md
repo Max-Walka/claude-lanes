@@ -8,7 +8,7 @@ A local web page for watching and answering four Claude Code sessions that work 
 ## What it reads (never changes)
 A lanes folder per project, usually `~/.claude/lanes/<project>/`:
 - `plan.md`: queues per lane, shared files, merge order, decisions log.
-- `coordinator.md`, `lane-a.md`, `lane-b.md`, `lane-c.md`: one status file per session, rewritten each time. Lane files are `Key: value` lines (`Updated`, `Now`, `Branch`, `Open PRs`, `Files claimed`, `Blocked on`, `Needs from other lanes`, `Handoff`; `Handoff` can run over several lines). The coordinator's file is looser markdown with a `Now:` line.
+- `coordinator.md`, `lane-a.md`, `lane-b.md`, `lane-c.md`: one status file per session, rewritten each time. Lane files are `Key: value` lines (`Updated`, `State`, `Now`, `Started`, `ETA`, `Decision`, `Branch`, `Open PRs`, `Files claimed`, `Blocked on`, `Needs from other lanes`, `Done today`, `Handoff`; `Done today` and `Handoff` can run over several lines; see `templates/status-file.md`). The coordinator's file is looser markdown with a `Now:` line.
 - `rules.md`, `coordinator-rules.md`: shown read-only, behind the menu.
 - `updates.jsonl`: sessions append one JSON object per line (formats in the README).
 
@@ -26,7 +26,7 @@ One screen, no page scrolling: the page is the viewport height and each panel sc
 
 **Centre: the chat** with the Coordinator only: the person's messages (from the page, and `from:<person>` lines mirrored from the terminal, tagged "terminal") and the Coordinator's lines to the person. Sorted by `ts`, newest at the bottom, auto-scrolling unless the person has scrolled up. `question`, `todo`, `done` and `merge-order` lines are never chat rows, and Done presses are not shown. The person's latest message is highlighted and pinned at the top until a Coordinator line has `replyTo` = its id, or the Coordinator writes to the person after it. Input pinned at the bottom of the column.
 
-**Right (about 300px)**: four compact session cards (dot, name, `Now` line, open PR count; click for a drawer with the full status file, its PRs with live state, and its messages). Dot: "Blocked" (red) when `Blocked on` isn't none; "Waiting on you" (blue) only when an open question has `about` = that session; otherwise "Working" (green). A card fades when its file is over an hour old. Below the cards, **Lane activity**: every lane update, newest first, two lines each, click to expand.
+**Right (about 300px)**: four compact session cards (dot, name, `Now` line, open PR count; click for a drawer with the full status file, its PRs with live state, and its messages). A lane board with a `State` field sets the look: Working (green, "Working, ~N min left" from `ETA`, plus time since `Started`), Needs decision (amber card with the question and "Blocked in ~N h"), Blocked (red card, only when `State` says so), Stopped (grey dashed, "Needs a restart"); clicking it expands Now, Started, ETA, open PRs and Done today with durations, with a link to the drawer. Boards without `State` fall back: "Blocked" (red) when `Blocked on` isn't none; "Waiting on you" (blue) only when an open question has `about` = that session; otherwise "Working" (green); clicking opens the drawer. A card fades when its file is over an hour old. Below the cards, **Lane activity**: every lane update, newest first, two lines each, click to expand.
 
 **Menu** (top right): `plan.md`, `rules.md`, `coordinator-rules.md`, read-only. **Project switcher** in the top bar when more than one project is configured.
 

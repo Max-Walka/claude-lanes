@@ -683,10 +683,85 @@ function sessionStatus(key) {
   const stale = st.mtime != null && Date.now() - st.mtime > STALE_MS;
   const openQs = state.needs.questions.filter((q) => q.status === 'open');
   const waiting = openQs.some((q) => q.aboutKey === key || (key === 'coordinator' && !q.aboutKey));
+  // A board with a State field says it itself; older boards fall back to "Blocked on".
+  const b = st.board;
+  if (b?.state === 'blocked') return { cls: 's-blocked', label: 'Blocked', stale };
+  if (b?.state === 'decision') return { cls: 's-decision', label: 'Needs decision', stale };
+  if (b?.state === 'stopped') return { cls: 's-stopped', label: 'Stopped', stale };
+  if (b?.state === 'working') return { cls: 's-working', label: b.etaShort ? `Working, ${b.etaShort} left` : 'Working', stale };
   const blocked = key !== 'coordinator' && !isNone(st.fields?.['Blocked on']);
   if (blocked) return { cls: 's-blocked', label: 'Blocked', stale };
   if (waiting) return { cls: 's-waiting', label: 'Waiting on you', stale };
   return { cls: 's-working', label: 'Working', stale };
+}
+
+// Does this board carry the new fields (State, Started, ETA, Decision, Done today)?
+const hasBoard = (st) => !!(st?.board && (st.board.state || st.board.started || st.board.eta || st.board.doneToday.length));
+
+function fmtDuration(ms) {
+  const m = Math.max(0, Math.round(ms / 60_000));
+  if (m < 60) return `${m} min`;
+  const hr = Math.floor(m / 60);
+  return m % 60 ? `${hr}h ${m % 60}m` : `${hr}h`;
+}
+
+function decisionInfo(d) {
+  if (!d) return null;
+  const q = d.id ? state.needs.questions.find((x) => x.id === d.id) : null;
+  const what = q ? (q.title || String(q.text || '').split('\n')[0]) : d.id || d.text;
+  return { what: noEmDash(what), id: d.id, blockedIn: d.blockedIn, settled: q ? q.status !== 'open' : false, found: !!q };
+}
+
+// One line under the "Now" line that the state calls for, or null.
+function stateLine(key, ss) {
+  const st = state.sessions[key];
+  const b = st?.board;
+  if (!b) return null;
+  if (ss.cls === 's-decision') {
+    const d = decisionInfo(b.decision);
+    return h('div', { class: 'scard-decision' },
+      h('span', { class: 'dq' }, d ? d.what : 'Waiting on a decision'),
+      d?.blockedIn ? h('span', { class: 'din' }, `Blocked in ${d.blockedIn}`) : null);
+  }
+  if (ss.cls === 's-blocked' && !isNone(st.fields?.['Blocked on'])) return h('div', { class: 'scard-blocked' }, noEmDash(st.fields['Blocked on'].split('\n')[0]));
+  if (ss.cls === 's-stopped') return h('div', { class: 'scard-meta' }, 'Needs a restart');
+  if (ss.cls === 's-working' && (b.started || b.eta)) {
+    return h('div', { class: 'scard-meta' }, [
+      b.started ? `${fmtDuration(Date.now() - b.started)} in` : null,
+      b.eta ? 'ETA is rough' : null,
+    ].filter(Boolean).join(' · '));
+  }
+  return null;
+}
+
+// The expanded part of a lane card: Now, Started, ETA, open PRs, then Done today.
+function laneDetails(key) {
+  const st = state.sessions[key];
+  const f = st.fields || {};
+  const b = st.board;
+  const d = decisionInfo(b.decision);
+  const open = prNums(f['Open PRs']);
+  const kv = (label, value) => value ? h('div', { class: 'kv' }, h('span', { class: 'k' }, label), h('span', { class: 'v' }, value)) : null;
+  return h('div', { class: 'scard-more' },
+    f.Now ? kv('Now', noEmDash(f.Now)) : null,
+    b.started ? kv('Started', `${fmtTime(b.started)}${new Date(b.started).toDateString() === new Date().toDateString() ? '' : `, ${fmtDay(b.started)}`} (${fmtDuration(Date.now() - b.started)} ago)`) : null,
+    b.eta ? kv('ETA', `${b.eta}${/rough/i.test(b.eta) ? '' : ' (rough)'}, as of ${fmtTime(st.mtime)}`) : null,
+    d ? kv('Decision', [d.what, d.found && d.id ? `(${d.id})` : null, d.blockedIn ? `blocked in ${d.blockedIn}` : null, d.settled ? 'answered' : null].filter(Boolean).join(' · ')) : null,
+    kv('Open PRs', open.length ? h('span', { class: 'pr-links' }, open.map((n) => {
+      const p = state.prs?.[n];
+      const tag = p && p.ok ? (p.state === 'MERGED' ? 'merged' : p.state === 'CLOSED' ? 'closed' : null) : null;
+      return h('span', { class: tag ? 'gone' : '' }, prLink(n), tag ? ` ${tag}` : '');
+    })) : 'none'),
+    h('div', { class: 'done-today' },
+      h('div', { class: 'k' }, `Done today${b.doneToday.length ? ` (${b.doneToday.length})` : ''}`),
+      b.doneToday.length ? h('ul', null, b.doneToday.map((x) => h('li', null,
+        h('span', { class: 'dt-task' }, noEmDash(x.task)),
+        h('span', { class: 'dt-meta' }, [
+          x.pr ? prLink(x.pr) : null,
+          x.started || x.finished ? `${x.started || '?'} to ${x.finished || '?'}` : null,
+          x.took ? h('b', null, x.took) : null,
+        ].filter(Boolean).flatMap((part, i) => (i ? [' · ', part] : [part])))))) : h('div', { class: 'muted small' }, 'Nothing yet')),
+    h('button', { type: 'button', class: 'more', onclick: () => openDrawer(key) }, 'Full status file and messages'));
 }
 
 function nowLine(key) {
@@ -706,16 +781,29 @@ function openPrCount(key) {
 }
 
 function renderSessions() {
+  const focused = document.activeElement?.closest?.('#session-cards [data-card]')?.dataset.card;
   $('#session-cards').replaceChildren(...SESSIONS.map((s) => {
     const ss = sessionStatus(s.key);
     const st = state.sessions[s.key];
     const n = openPrCount(s.key);
     const foot = [n == null ? null : n === 1 ? '1 open PR' : `${n} open PRs`, ss.stale ? `quiet ${fmtAgo(st.mtime)}` : null].filter(Boolean).join(' · ');
-    return h('button', { type: 'button', class: `scard ${ss.stale ? 'stale' : ''}`, onclick: () => openDrawer(s.key), 'aria-label': `${s.name}: ${ss.label}. Open details` },
+    // Boards with the new fields expand in place; older boards and the coordinator open the drawer.
+    const expandable = s.key !== 'coordinator' && hasBoard(st);
+    const id = `lane:${s.key}`;
+    const open = expandable && expanded.has(id);
+    const main = h('button', {
+      type: 'button', class: 'scard-main', dataset: { card: s.key },
+      onclick: () => { if (!expandable) return openDrawer(s.key); open ? expanded.delete(id) : expanded.add(id); renderSessions(); },
+      'aria-expanded': expandable ? String(open) : null,
+      'aria-label': `${s.name}: ${ss.label}. ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
+    },
       h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), h('span', { class: `state ${ss.cls}` }, ss.label)),
       h('div', { class: 'scard-now' }, noEmDash(nowLine(s.key))),
+      stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
+    return h('div', { class: `scard ${ss.cls} ${ss.stale && !open ? 'stale' : ''} ${open ? 'open' : ''}` }, main, open ? laneDetails(s.key) : null);
   }));
+  if (focused) document.querySelector(`#session-cards [data-card="${focused}"]`)?.focus();
 }
 
 function renderActivity() {
@@ -756,7 +844,7 @@ function renderDrawer() {
   } else {
     const f = st.fields || {};
     prs = prNums(f['Open PRs']);
-    const quiet = ['Branch', 'Files claimed', 'Handoff'].filter((k) => f[k] && !(k !== 'Handoff' && isNone(f[k])));
+    const quiet = ['State', 'Started', 'ETA', 'Decision', 'Branch', 'Files claimed', 'Done today', 'Handoff'].filter((k) => f[k] && !(k !== 'Handoff' && isNone(f[k])));
     status = h('div', { class: 'status' },
       f.Now ? field('Now', f.Now, 'now') : null,
       isNone(f['Blocked on']) ? null : field('Blocked on', f['Blocked on'], 'blocked'),
