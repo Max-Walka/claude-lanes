@@ -178,7 +178,14 @@ button { font: inherit; color: inherit; }
 .ready .owner { display: inline-flex; align-items: center; gap: 5px; }
 .ready-body { padding: 0 10px 10px 36px; display: grid; gap: 6px; font-size: 12px; color: var(--text-2); }
 .ready-body .msg-text { font-size: 12px; color: var(--text); }
-.unordered-head { font-size: 12px; color: var(--text-3); padding: 6px 2px 0; }
+/* Lane-reported ready PRs outside the merge order: plainly not part of the merge list. */
+.checking-head { font-size: 12px; font-weight: 600; color: var(--text-3); padding: 12px 2px 0; margin-top: 4px; border-top: 1px solid var(--line); }
+.checking { display: grid; gap: 2px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--text-3); font-size: 12px; }
+.checking .c-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.checking .num { color: var(--text-2); flex: none; }
+.checking .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.checking .c-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.checking .owner { display: inline-flex; align-items: center; gap: 5px; }
 .mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .mini .dot { width: 7px; height: 7px; }
 .mini.pass .dot { background: var(--ok); }
