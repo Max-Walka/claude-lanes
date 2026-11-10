@@ -208,46 +208,42 @@ class Composer {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = navigator.language || 'en-NZ';
-    const base = this.textarea.value;
-    const sep = base && !/\s$/.test(base) ? ' ' : '';
-    let finals = '';
+    // Final words are fixed once heard: they are kept by result index and never rewritten.
+    // Only the phrase still being heard (interim) changes, and it always sits after them.
+    const dict = new Dictation(this.textarea.value);
     // What happened, so a silent failure can say why. Every event also goes to the console.
     const seen = { audio: false, sound: false, results: 0, words: 0, error: null };
     const log = (...a) => console.info('[dictation]', ...a);
+    const live = () => this.rec === rec; // false once stopped: late events are dropped
     log('start', { lang: rec.lang, browser: navigator.userAgent });
-    rec.onaudiostart = () => { seen.audio = true; log('audiostart'); this.setStatus('Listening. Speak now.'); };
-    rec.onsoundstart = () => { seen.sound = true; log('soundstart'); };
-    rec.onspeechstart = () => log('speechstart');
-    rec.onnomatch = () => log('nomatch');
+    rec.onaudiostart = () => { if (!live()) return; seen.audio = true; log('audiostart'); this.setStatus('Listening. Speak now.'); };
+    rec.onsoundstart = () => { if (live()) { seen.sound = true; log('soundstart'); } };
+    rec.onspeechstart = () => { if (live()) log('speechstart'); };
+    rec.onnomatch = () => { if (live()) log('nomatch'); };
     rec.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        const said = (r[0]?.transcript || '').trim();
+      if (!live()) { log('late result dropped'); return; }
+      const results = [...e.results].map((r) => ({ final: r.isFinal, text: (r[0]?.transcript || '').trim() }));
+      for (let i = e.resultIndex; i < results.length; i++) {
         seen.results++;
-        if (said) seen.words++;
-        log('result', { final: r.isFinal, text: said, confidence: r[0]?.confidence });
-        if (!said) continue;
-        if (r.isFinal) finals += (finals && !/\s$/.test(finals) ? ' ' : '') + said;
-        else interim += ` ${said}`;
+        if (results[i].text) seen.words++;
+        log('result', { i, final: results[i].final, text: results[i].text });
       }
-      if (!seen.words) return;
-      this.applyingSpeech = true;
-      this.textarea.value = base + sep + finals + (interim ? (finals ? ' ' : '') + interim.trim() : '');
-      this.textarea.dispatchEvent(new Event('input'));
-      this.applyingSpeech = false;
-      const end = this.textarea.value.length;
-      this.textarea.setSelectionRange(end, end);
-      this.setStatus('Listening. Speak now.');
+      if (!dict.apply(e.resultIndex, results)) return; // nothing new: leave the box alone
+      this.showDictation(dict.text());
     };
-    rec.onerror = (e) => { seen.error = e.error; log('error', e.error, e.message || ''); };
+    rec.onerror = (e) => { if (!live()) return; seen.error = e.error; log('error', e.error, e.message || ''); };
     rec.onend = () => {
       log('end', seen);
-      this.listening = false; this.rec = null; this.mic.classList.remove('listening'); this.mic.setAttribute('aria-pressed', 'false'); this.mic.title = 'Dictate';
+      if (!live()) return; // stopped by the person: already tidied up
+      this.rec = null;
+      this.dict = null;
+      this.micOff();
       this.setError(dictationProblem(seen));
     };
     try { rec.start(); } catch (err) { log('start threw', String(err)); this.setError('Dictation could not start. Try Windows voice typing: press Win+H in the box.'); return; }
     this.rec = rec;
+    this.dict = dict;
+    this.seen = seen;
     this.listening = true;
     this.setStatus('Starting the microphone');
     this.mic.classList.add('listening');
@@ -256,7 +252,37 @@ class Composer {
     this.textarea.focus();
   }
 
-  stopMic() { if (this.rec) this.rec.stop(); }
+  showDictation(value) {
+    this.applyingSpeech = true;
+    this.textarea.value = value;
+    this.textarea.dispatchEvent(new Event('input'));
+    this.applyingSpeech = false;
+    const end = value.length;
+    this.textarea.setSelectionRange(end, end);
+  }
+
+  micOff() {
+    this.listening = false;
+    this.mic.classList.remove('listening');
+    this.mic.setAttribute('aria-pressed', 'false');
+    this.mic.title = 'Dictate';
+  }
+
+  // Stop at once: abort (stop() waits for the service to finish), drop anything that
+  // arrives afterwards, and keep what the box shows now.
+  stopMic() {
+    const rec = this.rec;
+    if (!rec) return;
+    this.rec = null;
+    this.dict = null;
+    try { rec.abort(); } catch { /* already ended */ }
+    console.info('[dictation]', 'stopped by you', this.seen);
+    this.micOff();
+    // Words came through, or nothing came back yet: no message. Empty results or an error: say why.
+    const seen = this.seen;
+    this.seen = null;
+    this.setError(seen && !seen.words && (seen.results || seen.error) ? dictationProblem(seen) : '');
+  }
 
   async send() {
     if (this.sending) return;
@@ -288,6 +314,44 @@ class Composer {
       this.sendBtn.disabled = false;
       this.sendBtn.textContent = 'Send';
     }
+  }
+}
+
+// The text of one dictation run: what was in the box before, the final phrases by result
+// index (fixed once final), and the one phrase still being heard. If the browser starts a
+// fresh results list (shorter than before), the finals so far are folded into the fixed part.
+class Dictation {
+  constructor(before) {
+    this.fixed = before;
+    this.finals = new Map();
+    this.interim = '';
+    this.lastLength = 0;
+  }
+
+  apply(resultIndex, results) {
+    if (results.length < this.lastLength) { this.fixed = this.text(false); this.finals.clear(); }
+    this.lastLength = results.length;
+    let changed = false;
+    let interim = '';
+    for (let i = resultIndex; i < results.length; i++) {
+      const r = results[i];
+      if (r.final) {
+        if (r.text && !this.finals.has(i)) { this.finals.set(i, r.text); changed = true; }
+      } else if (r.text) interim += ` ${r.text}`;
+    }
+    interim = interim.trim();
+    // An empty interim with no new final is the service between phrases: keep showing the last one.
+    if (interim && interim !== this.interim) { this.interim = interim; changed = true; }
+    if (changed && !interim) this.interim = '';
+    return changed;
+  }
+
+  text(withInterim = true) {
+    const parts = [...this.finals.keys()].sort((a, b) => a - b).map((k) => this.finals.get(k));
+    if (withInterim && this.interim) parts.push(this.interim);
+    const said = parts.join(' ');
+    if (!said) return this.fixed;
+    return this.fixed + (this.fixed && !/\s$/.test(this.fixed) ? ' ' : '') + said;
   }
 }
 
