@@ -134,18 +134,31 @@ button { font: inherit; color: inherit; }
 .pr-refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 
 /* Needs you stands out only when something needs him. */
-.needs-panel { flex: 0 1 auto; max-height: 62%; }
+/* Needs you keeps its own space: it never shrinks for Ready to merge, and scrolls past 45%. */
+.needs-panel { flex: 0 0 auto; max-height: 45%; }
+#needs-list { gap: 2px; }
+.need-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 8px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); text-align: left; cursor: pointer; font-size: 13px; line-height: 1.4;
+}
+.need-row:hover { background: var(--surface); }
+.need-row .ntag { flex: none; }
+.need-row .need-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.need-row .dot { flex: none; width: 7px; height: 7px; }
+.need-row.done { color: var(--text-3); }
+.need-row.done .ntag { background: var(--surface-2); color: var(--text-3); }
+/* A Needs you card opens here, in full. */
+.card-modal { width: min(600px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); }
+.card-modal::backdrop { background: rgba(0, 0, 0, .35); }
+.card-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 0 20px; }
+.card-modal-head h2 { font-size: 12px; color: var(--heading); }
+.card-modal-body { padding: 8px 20px 20px; }
+.card-modal-body .qcard, .card-modal-body .todo { padding: 0; background: none; border: 0; }
+.card-modal-body .qcard .clamp { -webkit-line-clamp: unset; display: block; }
 .needs-panel.has .panel-head h2 { font-size: 14px; }
 .nothing { font-size: 12px; color: var(--text-3); padding: 2px; }
-.ready-panel { flex: 1 1 auto; }
+.ready-panel { flex: 1 1 auto; min-height: 120px; }
 .sessions-panel { flex: none; }
-/* Needs you: one card at a time, paged. */
-.needs-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
-.needs-pager[hidden] { display: none; }
-.needs-pager .pager-pos { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
-.needs-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
-.needs-pager .pager-btn svg { width: 16px; height: 16px; }
-.needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
 /* The lane activity feed lives in a drawer, for debugging. */
 .activity-link { align-self: flex-start; border: 0; background: none; padding: 2px; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .activity-link:hover { color: var(--text); text-decoration: underline; }
@@ -178,14 +191,6 @@ button { font: inherit; color: inherit; }
 .ready .owner { display: inline-flex; align-items: center; gap: 5px; }
 .ready-body { padding: 0 10px 10px 36px; display: grid; gap: 6px; font-size: 12px; color: var(--text-2); }
 .ready-body .msg-text { font-size: 12px; color: var(--text); }
-/* Lane-reported ready PRs outside the merge order: plainly not part of the merge list. */
-.checking-head { font-size: 12px; font-weight: 600; color: var(--text-3); padding: 12px 2px 0; margin-top: 4px; border-top: 1px solid var(--line); }
-.checking { display: grid; gap: 2px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--text-3); font-size: 12px; }
-.checking .c-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.checking .num { color: var(--text-2); flex: none; }
-.checking .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.checking .c-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.checking .owner { display: inline-flex; align-items: center; gap: 5px; }
 .mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .mini .dot { width: 7px; height: 7px; }
 .mini.pass .dot { background: var(--ok); }
@@ -492,4 +497,4 @@ button { font: inherit; color: inherit; }
 .todo.closed .card-title { text-decoration: line-through; text-decoration-color: var(--line-strong); }
 
 /* Section headers in one warm orange (darker in light mode so it stays readable). */
-.checking-head, .dsection h3 { color: var(--heading); }
+.dsection h3 { color: var(--heading); }

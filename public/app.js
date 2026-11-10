@@ -414,8 +414,6 @@ const ICONS = {
   send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
-  prev: '<path d="m14.5 6-6 6 6 6"/>',
-  next: '<path d="m9.5 6 6 6-6 6"/>',
 };
 function icon(name) {
   const s = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`, 'image/svg+xml');
@@ -431,15 +429,15 @@ function attachmentThumbs(r) {
 }
 
 // ---------- PR state ----------
+// Shows only what GitHub actually answered; nothing when the lookup failed.
 function ciMini(p) {
-  if (!p) return h('span', { class: 'mini' }, state.prsFetching || !state.prsFetchedAt ? 'Checking' : 'PR state unavailable');
-  if (!p.ok) return h('span', { class: 'mini' }, 'PR state unavailable');
+  if (!p || !p.ok) return null;
   if (p.state === 'MERGED') return h('span', { class: 'mini' }, 'Merged');
   if (p.state === 'CLOSED') return h('span', { class: 'mini' }, 'Closed');
-  const label = { pass: 'CI pass', pending: 'CI pending', fail: 'CI fail', none: 'No CI', unknown: 'CI unknown' }[p.ci] || 'CI unknown';
+  const label = { pass: 'CI pass', pending: 'CI pending', fail: 'CI fail' }[p.ci];
   return [
-    h('span', { class: `mini ${p.ci}`, title: (p.checks || []).map((c) => `${c.name}: ${c.bucket}`).join('\n') }, dot(), label),
-    h('span', { class: 'mini', title: 'Greptile confidence score' }, p.greptile == null ? 'Greptile none' : `Greptile ${p.greptile}/5`),
+    label ? h('span', { class: `mini ${p.ci}`, title: (p.checks || []).map((c) => `${c.name}: ${c.bucket}`).join('\n') }, dot(), label) : null,
+    p.greptile == null ? null : h('span', { class: 'mini', title: 'Greptile confidence score' }, `Greptile ${p.greptile}/5`),
   ];
 }
 
@@ -535,19 +533,39 @@ function questionCard(q) {
       last && last.choice != null && q.options[last.choice] ? `. You chose "${q.options[last.choice]}"` : ''));
 }
 
-// Needs you shows one card at a time. needsCur is the shown card's key; when it
-// goes (answered, Done), the card that moves into its place is shown: the next one.
-let needsCur = null;
-let needsIdx = 0;
-function needsPage(delta) { needsIdx += delta; needsCur = null; renderNeeds(); $('#needs-list .qcard, #needs-list .todo')?.scrollIntoView?.({ block: 'nearest' }); }
+// Needs you is a list of titles, one line each. Clicking one opens the full
+// card (text, steps, options or Done) in a modal. modalKey is the open card.
+let modalKey = null;
 
-function renderNeeds() {
+function needsModel() {
   const qs = state.needs.questions;
   const open = qs.filter((q) => q.status === 'open').sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const recentQs = qs.filter((q) => q.status !== 'open' && (q.status === 'sent' || (q.done?.t != null && Date.now() - q.done.t < 2 * 3600e3)));
   const todos = todoModel();
-  // One list: decisions first, then to dos. The total counts both.
-  const total = open.length + todos.active.length;
+  const items = [
+    ...open.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', card: () => questionCard(q) })),
+    ...todos.active.map((t) => ({ key: `t:${t.id}`, u: t, kind: 'todo', card: () => todoCard(t, 'active') })),
+  ];
+  const recent = [
+    ...recentQs.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', done: true, at: q.done?.t ?? q.replies?.at(-1)?.t ?? q.t, card: () => questionCard(q) })),
+    ...todos.closed.slice(0, 20).map((c) => ({ key: `t:${c.t.id}`, u: c.t, kind: 'todo', done: true, at: c.at, card: () => todoCard(c.t, 'closed') })),
+  ].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  return { open, todos, items, recent };
+}
+
+function needRow(it) {
+  const { title, why } = splitTitle(it.u);
+  const text = title || why.split('\n')[0] || '(no text)';
+  const key = it.u.aboutKey || (it.u.fromKey && it.u.fromKey !== 'coordinator' ? it.u.fromKey : null);
+  return h('button', { type: 'button', class: `need-row ${it.done ? 'done' : ''}`, title: text, onclick: () => openCard(it.key) },
+    h('span', { class: `ntag ${it.kind === 'decide' ? 'decide' : 'todo-tag'}` }, it.kind === 'decide' ? 'Decide' : 'To do'),
+    h('span', { class: 'need-title' }, noEmDash(text)),
+    key ? dot(key) : null);
+}
+
+function renderNeeds() {
+  const { open, todos, items, recent } = needsModel();
+  const total = items.length;
   $('#needs-panel').classList.toggle('has', total > 0);
   const count = $('#needs-count');
   count.hidden = total === 0;
@@ -558,32 +576,38 @@ function renderNeeds() {
   tc.textContent = String(total);
   document.title = total ? `(${total}) Lanes` : 'Lanes';
 
-  const cards = [...open.map((q) => ({ key: `q:${q.id}`, node: () => questionCard(q) })), ...todos.active.map((t) => ({ key: `t:${t.id}`, node: () => todoCard(t, 'active') }))];
-  const at = cards.findIndex((c) => c.key === needsCur);
-  needsIdx = Math.max(0, Math.min(at >= 0 ? at : needsIdx, cards.length - 1));
-  needsCur = cards[needsIdx]?.key ?? null;
-  const pager = $('#needs-pager');
-  pager.hidden = cards.length < 2;
-  if (cards.length > 1) {
-    pager.replaceChildren(
-      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous', 'aria-label': 'Previous card', disabled: needsIdx === 0 ? true : null, onclick: () => needsPage(-1) }, icon('prev')),
-      h('span', { class: 'pager-pos', 'aria-live': 'polite' }, `${needsIdx + 1} of ${cards.length}`),
-      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next', 'aria-label': 'Next card', disabled: needsIdx === cards.length - 1 ? true : null, onclick: () => needsPage(1) }, icon('next')));
-  }
-  const nodes = cards.length ? [cards[needsIdx].node()] : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
-  const recent = [
-    ...recentQs.map((q) => ({ at: q.done?.t ?? q.replies?.at(-1)?.t ?? q.t, node: () => questionCard(q) })),
-    ...todos.closed.slice(0, 20).map((c) => ({ at: c.at, node: () => todoCard(c.t, 'closed') })),
-  ].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  const nodes = items.length ? items.map(needRow) : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
   if (recent.length) {
     const showing = expanded.has('recent');
     nodes.push(h('button', { type: 'button', class: 'more', style: 'color:var(--text-2)', onclick: () => { showing ? expanded.delete('recent') : expanded.add('recent'); renderNeeds(); } },
       `${showing ? 'Hide' : 'Show'} recently done (${recent.length})`));
-    if (showing) nodes.push(...recent.map((r) => r.node()));
+    if (showing) nodes.push(...recent.map(needRow));
   }
   $('#needs-list').replaceChildren(...nodes);
+  renderCardModal();
 }
 
+function openCard(key) {
+  const { items } = needsModel();
+  modalLive = items.some((x) => x.key === key);
+  modalKey = key;
+  renderCardModal();
+  const d = $('#card-modal');
+  if (!d.open) d.showModal();
+}
+
+// Re-rendered with every update while open. A card opened while waiting on
+// you closes the modal once it is answered or marked Done (it leaves the list).
+let modalLive = false;
+function renderCardModal() {
+  if (!modalKey) return;
+  const { items, recent } = needsModel();
+  const live = items.find((x) => x.key === modalKey);
+  if (modalLive && !live) { $('#card-modal').close(); return; }
+  const it = live || recent.find((x) => x.key === modalKey);
+  if (!it) { $('#card-modal').close(); return; }
+  $('#card-modal-body').replaceChildren(it.card());
+}
 // ---------- To do cards (inside Needs you) ----------
 // A todo stays until the person presses Done (an answer with done:true) or the
 // Coordinator sends a done line for it. "after":"merge" waits for its PR.
@@ -679,29 +703,10 @@ function readyRow(n, ord) {
       p?.url ? h('a', { href: p.url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null));
 }
 
-// A lane-reported ready PR outside the merge order: one quiet line, no number, no merge look.
-function checkingRow(n) {
-  const p = state.prs?.[n];
-  const owner = ownerOf(n);
-  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
-  const title = prLabel(n) || (p && p.ok ? shortTitle(p.title) : (laneLine ? noEmDash(laneLine.text).slice(0, 80) : ''));
-  return h('div', { class: 'checking' },
-    h('span', { class: 'c-top' },
-      p && p.ok ? h('a', { class: 'num', href: p.url, target: '_blank', rel: 'noreferrer' }, `#${n}`) : h('span', { class: 'num' }, `#${n}`),
-      h('span', { class: 'title', title }, title)),
-    h('span', { class: 'c-bottom' },
-      owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
-      h('span', null, 'not in the merge order'),
-      ciMini(p)));
-}
-
 function renderReady() {
   const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator');
   // Exactly the latest merge order, keeping its numbers (a merged PR drops out, the others keep theirs).
   const ordered = (mo ? mo.prs.map((n, i) => ({ n, ord: i + 1 })) : []).filter((x) => !isGone(x.n));
-  const orderedNums = ordered.map((x) => x.n);
-  const readySet = [...new Set(state.needs.ready.map((r) => r.pr))].filter((n) => !isGone(n));
-  const rest = readySet.filter((n) => !orderedNums.includes(n));
   const nodes = [];
   // A todo waiting on a ready PR shows as a line under that PR's row; click it for the full todo.
   const waiting = todoModel().waiting;
@@ -717,26 +722,10 @@ function renderReady() {
   };
   ordered.forEach((x) => row(x.n, x.ord));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
-  // A lane says it is ready but the Coordinator has not put it in the order: not mergeable yet.
-  if (rest.length) {
-    nodes.push(h('div', { class: 'checking-head', title: 'A lane says these are ready. They are not in the merge order from the Coordinator, so do not merge them yet.' },
-      `Being checked by the Coordinator (${rest.length})`));
-    rest.forEach((n) => nodes.push(checkingRow(n)));
-  }
-
-  // "2 of 7 open": ready rows against every open PR by the account the lanes push as.
-  const om = state.openMine;
-  const readyCount = ordered.length;
+  // Only a real problem is shown: one line, not one per PR.
+  if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
   const rc = $('#ready-count');
-  if (om) {
-    const list = om.numbers.map((n) => `#${n}`).join(', ');
-    rc.textContent = `· ${readyCount} of ${om.count} open`;
-    rc.title = om.count ? `Open PRs: ${list}` : 'No open PRs';
-    nodes.push(h('div', { class: 'open-total', title: rc.title }, om.count === 1 ? '1 open PR in the repo' : `${om.count} open PRs in the repo`, om.count ? `: ${list}` : ''));
-  } else {
-    rc.textContent = '';
-    rc.removeAttribute('title');
-  }
+  rc.textContent = ordered.length ? `(${ordered.length})` : '';
   $('#ready-list').replaceChildren(...nodes);
   renderPrAge();
 }
@@ -1195,6 +1184,8 @@ $('#pr-refresh').addEventListener('click', async () => {
 $('#drawer-close').addEventListener('click', () => $('#drawer').close());
 $('#drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#drawer').addEventListener('close', () => { drawerKey = null; });
+$('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; });
+$('#card-modal-close').addEventListener('click', () => $('#card-modal').close());
 $('#activity-btn').addEventListener('click', () => openDrawer('activity'));
 $('#doc-close').addEventListener('click', () => $('#doc').close());
 $('#doc').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
