@@ -143,6 +143,38 @@ button { font: inherit; color: inherit; }
 .needs-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
 .needs-pager .pager-btn svg { width: 16px; height: 16px; }
 .needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
+
+/* SQL queries on a card: one at a time. */
+.sql { margin-top: 12px; display: grid; gap: 8px; }
+.sql-head { display: flex; align-items: center; gap: 8px; }
+.sql-title { font-weight: 600; font-size: 13px; }
+.sql-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); flex: none; }
+.sql-pager .pager-pos { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.sql-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
+.sql-pager .pager-btn svg { width: 16px; height: 16px; }
+.sql-pager .pager-btn:disabled { opacity: .35; cursor: default; }
+.sql-box { position: relative; }
+.sql-code { margin: 0; padding: 12px 14px; padding-right: 92px; background: var(--surface-2); border-radius: 8px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; white-space: pre; overflow: auto; max-height: 50vh; tab-size: 4; }
+.sql-code code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+.sql-copy { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; }
+.sql-copy svg { width: 14px; height: 14px; }
+.sql-expect { font-size: 13px; color: var(--text-2); }
+.sql-expect b { color: var(--text); font-weight: 600; }
+.sq-kw { color: #8a3fb8; font-weight: 600; }
+.sq-str { color: #2e7d4f; }
+.sq-num { color: #b0571f; }
+.sq-com { color: var(--text-3); font-style: italic; }
+.sq-id { color: #2f5fd0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sq-kw { color: #c792ea; }
+  :root:not([data-theme="light"]) .sq-str { color: #a5d68a; }
+  :root:not([data-theme="light"]) .sq-num { color: #f2a06b; }
+  :root:not([data-theme="light"]) .sq-id { color: #82aaff; }
+}
+:root[data-theme="dark"] .sq-kw { color: #c792ea; }
+:root[data-theme="dark"] .sq-str { color: #a5d68a; }
+:root[data-theme="dark"] .sq-num { color: #f2a06b; }
+:root[data-theme="dark"] .sq-id { color: #82aaff; }
 .need-card { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; cursor: pointer; }
 .need-card:hover { border-color: var(--line); }
 /* A card that just arrived: a short accent glow. */
