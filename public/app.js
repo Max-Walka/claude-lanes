@@ -122,10 +122,11 @@ class Composer {
       ? h('button', { type: 'button', class: 'icon-btn', title: 'Dictate', 'aria-label': 'Dictate', 'aria-pressed': 'false', onclick: () => this.toggleMic() }, icon('mic'))
       : null;
     this.file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => { this.addFiles([...this.file.files]); this.file.value = ''; } });
-    this.attach = h('button', { type: 'button', class: 'icon-btn', title: 'Add image', 'aria-label': 'Add image', onclick: () => this.file.click() }, icon('image'));
-    this.sendBtn = h('button', { type: 'button', class: 'btn primary send-btn', onclick: () => this.send() }, 'Send');
+    this.attach = h('button', { type: 'button', class: 'icon-btn', title: 'Add an image (or paste or drop one)', 'aria-label': 'Add image', onclick: () => this.file.click() }, icon('plus'));
+    this.sendBtn = h('button', { type: 'button', class: 'send-btn', title: 'Send (Enter)', 'aria-label': 'Send', onclick: () => this.send() }, icon('send'));
+    this.model = h('span', { class: 'composer-model', hidden: true });
     this.el = h('div', { class: 'composer' }, this.thumbs, this.textarea,
-      h('div', { class: 'composer-bar' }, this.hint, this.file, this.attach, this.mic, this.sendBtn));
+      h('div', { class: 'composer-bar' }, this.file, this.attach, this.mic, this.hint, this.model, this.sendBtn));
 
     this.textarea.addEventListener('input', () => { this.autosize(); if (this.listening && !this.applyingSpeech) this.stopMic(); });
     this.textarea.addEventListener('keydown', (e) => {
@@ -149,9 +150,21 @@ class Composer {
     this.textarea.style.height = `${Math.min(this.textarea.scrollHeight, 260)}px`;
   }
 
+  // The model the Coordinator runs, read-only (shown in the main box only).
+  setModel(m) {
+    this.model.hidden = !m;
+    this.model.textContent = m ? m.label : '';
+    this.model.title = m ? `The Coordinator runs ${m.model}. Change it with /model in its terminal.` : '';
+  }
+
   setError(msg) {
     this.hint.className = msg ? 'err' : 'hint';
     this.hint.textContent = msg || 'Enter sends, Shift+Enter new line';
+  }
+
+  setStatus(msg) {
+    this.hint.className = 'hint live-hint';
+    this.hint.textContent = msg;
   }
 
   chooseOption(idx, text) {
@@ -193,6 +206,7 @@ class Composer {
       h('img', { src: img.dataUrl, alt: `Image ${i + 1}` }),
       h('button', { type: 'button', 'aria-label': `Remove image ${i + 1}`, title: 'Remove', onclick: () => { this.images.splice(i, 1); this.renderThumbs(); this.textarea.focus(); } }, '×'))));
     this.thumbs.hidden = this.images.length === 0;
+    this.el.classList.toggle('has-images', this.images.length > 0);
   }
 
   toggleMic() { this.listening ? this.stopMic() : this.startMic(); }
@@ -203,40 +217,81 @@ class Composer {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = navigator.language || 'en-NZ';
-    const base = this.textarea.value;
-    const sep = base && !/\s$/.test(base) ? ' ' : '';
-    let finals = '';
+    // Final words are fixed once heard: they are kept by result index and never rewritten.
+    // Only the phrase still being heard (interim) changes, and it always sits after them.
+    const dict = new Dictation(this.textarea.value);
+    // What happened, so a silent failure can say why. Every event also goes to the console.
+    const seen = { audio: false, sound: false, results: 0, words: 0, error: null };
+    const log = (...a) => console.info('[dictation]', ...a);
+    const live = () => this.rec === rec; // false once stopped: late events are dropped
+    log('start', { lang: rec.lang, browser: navigator.userAgent });
+    rec.onaudiostart = () => { if (!live()) return; seen.audio = true; log('audiostart'); this.setStatus('Listening. Speak now.'); };
+    rec.onsoundstart = () => { if (live()) { seen.sound = true; log('soundstart'); } };
+    rec.onspeechstart = () => { if (live()) log('speechstart'); };
+    rec.onnomatch = () => { if (live()) log('nomatch'); };
     rec.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) finals += (finals && !/\s$/.test(finals) ? ' ' : '') + r[0].transcript.trim();
-        else interim += r[0].transcript;
+      if (!live()) { log('late result dropped'); return; }
+      const results = [...e.results].map((r) => ({ final: r.isFinal, text: (r[0]?.transcript || '').trim() }));
+      for (let i = e.resultIndex; i < results.length; i++) {
+        seen.results++;
+        if (results[i].text) seen.words++;
+        log('result', { i, final: results[i].final, text: results[i].text });
       }
-      this.applyingSpeech = true;
-      this.textarea.value = base + sep + finals + (interim ? (finals ? ' ' : '') + interim.trim() : '');
-      this.textarea.dispatchEvent(new Event('input'));
-      this.applyingSpeech = false;
-      const end = this.textarea.value.length;
-      this.textarea.setSelectionRange(end, end);
+      if (!dict.apply(e.resultIndex, results)) return; // nothing new: leave the box alone
+      this.showDictation(dict.text());
     };
-    rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') this.setError('Microphone blocked. Allow it in the address bar.');
-      else if (e.error === 'no-speech') this.setError('Heard nothing. Try again.');
-      else if (e.error !== 'aborted') this.setError(`Dictation stopped (${e.error})`);
+    rec.onerror = (e) => { if (!live()) return; seen.error = e.error; log('error', e.error, e.message || ''); };
+    rec.onend = () => {
+      log('end', seen);
+      if (!live()) return; // stopped by the person: already tidied up
+      this.rec = null;
+      this.dict = null;
+      this.micOff();
+      this.setError(dictationProblem(seen));
     };
-    rec.onend = () => { this.listening = false; this.rec = null; this.mic.classList.remove('listening'); this.mic.setAttribute('aria-pressed', 'false'); this.mic.title = 'Dictate'; };
-    try { rec.start(); } catch { this.setError('Dictation could not start'); return; }
+    try { rec.start(); } catch (err) { log('start threw', String(err)); this.setError('Dictation could not start. Try Windows voice typing: press Win+H in the box.'); return; }
     this.rec = rec;
+    this.dict = dict;
+    this.seen = seen;
     this.listening = true;
-    this.setError('');
+    this.setStatus('Starting the microphone');
     this.mic.classList.add('listening');
     this.mic.setAttribute('aria-pressed', 'true');
     this.mic.title = 'Stop dictating';
     this.textarea.focus();
   }
 
-  stopMic() { if (this.rec) this.rec.stop(); }
+  showDictation(value) {
+    this.applyingSpeech = true;
+    this.textarea.value = value;
+    this.textarea.dispatchEvent(new Event('input'));
+    this.applyingSpeech = false;
+    const end = value.length;
+    this.textarea.setSelectionRange(end, end);
+  }
+
+  micOff() {
+    this.listening = false;
+    this.mic.classList.remove('listening');
+    this.mic.setAttribute('aria-pressed', 'false');
+    this.mic.title = 'Dictate';
+  }
+
+  // Stop at once: abort (stop() waits for the service to finish), drop anything that
+  // arrives afterwards, and keep what the box shows now.
+  stopMic() {
+    const rec = this.rec;
+    if (!rec) return;
+    this.rec = null;
+    this.dict = null;
+    try { rec.abort(); } catch { /* already ended */ }
+    console.info('[dictation]', 'stopped by you', this.seen);
+    this.micOff();
+    // Words came through, or nothing came back yet: no message. Empty results or an error: say why.
+    const seen = this.seen;
+    this.seen = null;
+    this.setError(seen && !seen.words && (seen.results || seen.error) ? dictationProblem(seen) : '');
+  }
 
   async send() {
     if (this.sending) return;
@@ -248,7 +303,7 @@ class Composer {
     if (this.choice != null && text.startsWith(this.choiceText)) body.choice = this.choice;
     this.sending = true;
     this.sendBtn.disabled = true;
-    this.sendBtn.textContent = 'Sending';
+    this.sendBtn.setAttribute('aria-busy', 'true');
     this.setError('');
     try {
       const res = await fetch('/api/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -266,9 +321,67 @@ class Composer {
     } finally {
       this.sending = false;
       this.sendBtn.disabled = false;
-      this.sendBtn.textContent = 'Send';
+      this.sendBtn.removeAttribute('aria-busy');
     }
   }
+}
+
+// The text of one dictation run: what was in the box before, the final phrases by result
+// index (fixed once final), and the one phrase still being heard. If the browser starts a
+// fresh results list (shorter than before), the finals so far are folded into the fixed part.
+class Dictation {
+  constructor(before) {
+    this.fixed = before;
+    this.finals = new Map();
+    this.interim = '';
+    this.lastLength = 0;
+  }
+
+  apply(resultIndex, results) {
+    if (results.length < this.lastLength) { this.fixed = this.text(false); this.finals.clear(); }
+    this.lastLength = results.length;
+    let changed = false;
+    let interim = '';
+    for (let i = resultIndex; i < results.length; i++) {
+      const r = results[i];
+      if (r.final) {
+        if (r.text && !this.finals.has(i)) { this.finals.set(i, r.text); changed = true; }
+      } else if (r.text) interim += ` ${r.text}`;
+    }
+    interim = interim.trim();
+    // An empty interim with no new final is the service between phrases: keep showing the last one.
+    if (interim && interim !== this.interim) { this.interim = interim; changed = true; }
+    if (changed && !interim) this.interim = '';
+    return changed;
+  }
+
+  text(withInterim = true) {
+    const parts = [...this.finals.keys()].sort((a, b) => a - b).map((k) => this.finals.get(k));
+    if (withInterim && this.interim) parts.push(this.interim);
+    const said = parts.join(' ');
+    if (!said) return this.fixed;
+    return this.fixed + (this.fixed && !/\s$/.test(this.fixed) ? ' ' : '') + said;
+  }
+}
+
+// Why a dictation run ended without words, in plain language; '' when it worked or was stopped.
+// The browser sends the audio to its own online speech service (Microsoft for Edge, Google for
+// Chrome); the page only gets back what that service returns.
+const WIN_H = 'Windows voice typing works instead: click in the box and press Win+H.';
+function dictationProblem(seen) {
+  const e = seen.error;
+  if (e === 'not-allowed') return 'Microphone blocked. Allow it from the icon in the address bar, then try again.';
+  if (e === 'service-not-allowed') return `The browser's speech service is turned off. ${WIN_H}`;
+  if (e === 'audio-capture') return 'No microphone found. Check Windows sound settings, then try again.';
+  if (e === 'network') return `The browser could not reach its online speech service. ${WIN_H}`;
+  if (e === 'language-not-supported') return `The speech service does not support ${navigator.language}. ${WIN_H}`;
+  if (e === 'no-speech') return 'Heard nothing. Check the right microphone is selected, then try again.';
+  if (e && e !== 'aborted') return `Dictation stopped (${e}). ${WIN_H}`;
+  if (seen.words) return '';
+  if (!seen.audio) return `The microphone never started. ${WIN_H}`;
+  if (seen.results) return `The speech service heard you but sent back no words. ${WIN_H}`;
+  if (!seen.sound) return 'No sound reached the page. Check the right microphone is selected.';
+  return `No words came back. ${WIN_H}`;
 }
 
 function composer(key, opts) {
@@ -297,6 +410,10 @@ async function toPngDataUrl(file) {
 const ICONS = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-9 9"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
 };
 function icon(name) {
   const s = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`, 'image/svg+xml');
@@ -632,21 +749,37 @@ function personMsg(m, { latest, terminal }) {
   }
   const domId = terminal ? `m-${m.line}` : `a-${m.id}`;
   return h('div', { class: `msg you ${latest ? 'latest' : ''}`, id: domId },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'who' }, 'You'), terminal ? h('span', { class: 'tag' }, 'terminal') : null,
-      !terminal && m.to && m.to !== 'Coordinator' ? h('span', null, `to ${m.to}`) : null,
-      h('span', { class: 'time', title: m.ts }, fmtTime(m.t))),
     re,
-    m.text ? h('div', { class: 'msg-text' }, noEmDash(m.text)) : null,
-    terminal ? null : attachmentThumbs(m));
+    h('div', { class: 'bubble' },
+      m.text ? h('div', { class: 'msg-text' }, noEmDash(m.text)) : null,
+      terminal ? null : attachmentThumbs(m)),
+    h('div', { class: 'msg-foot' },
+      terminal ? h('span', { class: 'tag', title: 'Typed in the Coordinator\'s terminal' }, 'terminal') : null,
+      !terminal && m.to && m.to !== 'Coordinator' ? h('span', null, `to ${m.to}`) : null,
+      h('span', { class: 'time', title: m.ts }, fmtTime(m.t))));
 }
 
 function coordMsg(u) {
-  return h('div', { class: 'msg' },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'who' }, dot('coordinator'), 'Coordinator'),
+  return h('div', { class: 'msg coord' },
+    u.text ? h('div', { class: 'msg-text blk' }, block(u.text)) : null,
+    h('div', { class: 'msg-actions' },
+      u.text ? copyButton(u.text) : null,
       ['ready', 'blocked'].includes(u.kind) ? h('span', { class: `kind kind-${u.kind}` }, u.kind) : null,
       u.pr ? prLink(u.pr) : null,
-      h('span', { class: 'time', title: u.ts }, fmtTime(u.t))),
-    u.text ? h('div', { class: 'msg-text blk' }, block(u.text)) : null);
+      h('span', { class: 'time', title: `Coordinator, ${u.ts}` }, fmtTime(u.t))));
+}
+
+function copyButton(text) {
+  const btn = h('button', { type: 'button', class: 'icon-btn mini-btn', title: 'Copy', 'aria-label': 'Copy message' }, icon('copy'));
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(noEmDash(text));
+      btn.replaceChildren(icon('check'));
+      btn.title = 'Copied';
+      setTimeout(() => { btn.replaceChildren(icon('copy')); btn.title = 'Copy'; }, 1500);
+    } catch { btn.title = 'Could not copy'; }
+  });
+  return btn;
 }
 
 function prLink(n) {
@@ -661,6 +794,7 @@ function renderChat() {
   const prevTop = sc.scrollTop;
   const entries = chatEntries();
   const latest = latestMine();
+  composers.get('main')?.setModel(state.models?.Coordinator || null);
   const nodes = [];
   let lastDay = '';
   for (const e of entries) {
@@ -828,7 +962,7 @@ function renderSessions() {
       'aria-expanded': expandable ? String(open) : null,
       'aria-label': `${s.name}: ${ss.label}. ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
     },
-      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), h('span', { class: `state ${ss.cls}` }, ss.label)),
+      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), state.models?.[s.name] ? h('span', { class: 'smodel', title: `Runs ${state.models[s.name].model}. Change it with /model in its terminal.` }, state.models[s.name].label) : null, h('span', { class: `state ${ss.cls}` }, ss.label)),
       h('div', { class: 'scard-now' }, noEmDash(nowLine(s.key))),
       stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
@@ -985,7 +1119,7 @@ function switchProject(i) {
 }
 
 function mountMain() {
-  const c = composer('main', { placeholder: 'Message the Coordinator, dictate, or paste a screenshot' });
+  const c = composer('main', { placeholder: 'Reply to the Coordinator' });
   $('#chat-input').replaceChildren(c.el);
 }
 
