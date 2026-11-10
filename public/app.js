@@ -932,6 +932,8 @@ function sessionStatus(key) {
   // A board with a State field says it itself; older boards fall back to "Blocked on".
   const b = st.board;
   // Handing off or Stopped: the session is done and needs a restart.
+  // Done for today: a quiet grey card, never stale, no restart.
+  if (b?.state === 'done') return { cls: 's-done', label: 'Done for today', stale: false };
   if (b?.state === 'handoff') return { cls: 's-restart', label: 'Handing off', stale };
   if (b?.state === 'stopped') return { cls: 's-restart', label: 'Stopped', stale };
   if (b?.state === 'blocked') return { cls: 's-blocked', label: 'Blocked', stale };

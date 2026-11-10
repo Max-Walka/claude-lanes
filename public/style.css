@@ -333,6 +333,9 @@ button { font: inherit; color: inherit; }
 .scard-head .state.s-other { color: var(--text-2); font-weight: 500; }
 .sdot.s-restart { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
 .sdot.s-other { background: var(--text-3); }
+.scard.s-done { background: var(--surface-2); }
+.scard-head .state.s-done { color: var(--text-3); font-weight: 500; }
+.sdot.s-done { background: var(--text-3); }
 .scard-restart { font-size: 12px; font-weight: 600; color: var(--bad); }
 .stale-chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
 .scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
