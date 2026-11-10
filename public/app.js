@@ -8,7 +8,7 @@ const SESSIONS = [
   { key: 'lane-b', name: 'Lane B' },
   { key: 'lane-c', name: 'Lane C' },
 ];
-const STALE_MS = 60 * 60 * 1000;
+const STALE_MS = 15 * 60 * 1000; // a board not updated for 15 min is "stale"
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const NEAR_BOTTOM_PX = 120;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -930,9 +930,12 @@ function sessionStatus(key) {
   const waiting = openQs.some((q) => q.aboutKey === key || (key === 'coordinator' && !q.aboutKey));
   // A board with a State field says it itself; older boards fall back to "Blocked on".
   const b = st.board;
+  // Handing off or Stopped: the session is done and needs a restart.
+  if (b?.state === 'handoff') return { cls: 's-restart', label: 'Handing off', stale };
+  if (b?.state === 'stopped') return { cls: 's-restart', label: 'Stopped', stale };
   if (b?.state === 'blocked') return { cls: 's-blocked', label: 'Blocked', stale };
   if (b?.state === 'decision') return { cls: 's-decision', label: 'Needs decision', stale };
-  if (b?.state === 'stopped') return { cls: 's-stopped', label: 'Stopped', stale };
+  if (b?.state === 'other') return { cls: 's-other', label: noEmDash(b.stateText.split(/[.(;:]/)[0]).trim().slice(0, 28), stale };
   if (b?.state === 'working') return { cls: 's-working', label: b.etaShort ? `Working, ${b.etaShort} left` : 'Working', stale };
   const blocked = key !== 'coordinator' && !isNone(st.fields?.['Blocked on']);
   if (blocked) return { cls: 's-blocked', label: 'Blocked', stale };
@@ -969,7 +972,7 @@ function stateLine(key, ss) {
       d?.blockedIn ? h('span', { class: 'din' }, `Blocked in ${d.blockedIn}`) : null);
   }
   if (ss.cls === 's-blocked' && !isNone(st.fields?.['Blocked on'])) return h('div', { class: 'scard-blocked' }, noEmDash(st.fields['Blocked on'].split('\n')[0]));
-  if (ss.cls === 's-stopped') return h('div', { class: 'scard-meta' }, 'Needs a restart');
+  if (ss.cls === 's-restart') return h('div', { class: 'scard-restart' }, 'Needs restart: click its VS Code profile');
   if (ss.cls === 's-working' && (b.started || b.eta)) {
     return h('div', { class: 'scard-meta' }, [
       b.started ? `${fmtDuration(Date.now() - b.started)} in` : null,
@@ -1042,11 +1045,11 @@ function renderSessions() {
       'aria-expanded': expandable ? String(open) : null,
       'aria-label': `${s.name}: ${ss.label}. ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
     },
-      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), state.models?.[s.name] ? h('span', { class: 'smodel', title: `Runs ${state.models[s.name].model}. Change it with /model in its terminal.` }, state.models[s.name].label) : null, h('span', { class: `state ${ss.cls}` }, ss.label)),
+      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), state.models?.[s.name] ? h('span', { class: 'smodel', title: `Runs ${state.models[s.name].model}. Change it with /model in its terminal.` }, state.models[s.name].label) : null, ss.stale ? h('span', { class: 'stale-chip', title: `Board not updated for ${fmtAgo(st.mtime).replace(/ ago$/, '')}` }, 'stale') : null, h('span', { class: `state ${ss.cls}` }, ss.label)),
       h('div', { class: 'scard-now' }, noEmDash(nowLine(s.key))),
       stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
-    return h('div', { class: `scard ${ss.cls} ${ss.stale && !open ? 'stale' : ''} ${open ? 'open' : ''}` }, main, open ? laneDetails(s.key) : null);
+    return h('div', { class: `scard ${ss.cls} ${ss.stale && !open && ss.cls !== 's-restart' ? 'stale' : ''} ${open ? 'open' : ''}` }, main, open ? laneDetails(s.key) : null);
   }));
   if (focused) document.querySelector(`#session-cards [data-card="${focused}"]`)?.focus();
 }

@@ -326,15 +326,20 @@ button { font: inherit; color: inherit; }
 }
 /* Board State looks: Working (green dot), Needs decision (amber card), Blocked (red card), Stopped (grey, dashed). */
 .scard.s-decision { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
-.scard.s-blocked { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
-.scard.s-stopped { border-style: dashed; background: var(--surface-2); }
+/* Needs a restart (Handing off, Stopped): red. Blocked and Needs decision: orange. */
+.scard.s-restart { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.scard.s-blocked { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.scard-head .state.s-restart { color: var(--bad); font-weight: 600; }
+.scard-head .state.s-other { color: var(--text-2); font-weight: 500; }
+.sdot.s-restart { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+.sdot.s-other { background: var(--text-3); }
+.scard-restart { font-size: 12px; font-weight: 600; color: var(--bad); }
+.stale-chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
 .scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
-.scard-head .state.s-stopped { color: var(--text-3); font-weight: 500; }
 .scard-head .state.s-working { color: var(--ok); }
 .sdot.s-decision { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
-.sdot.s-stopped { background: transparent; border: 1.5px solid var(--text-3); }
 .scard-meta { font-size: 12px; color: var(--text-3); }
-.scard-blocked { font-size: 12px; color: var(--bad); overflow-wrap: anywhere; }
+.scard-blocked { font-size: 12px; color: var(--warn); overflow-wrap: anywhere; }
 .scard-decision { font-size: 12px; display: grid; gap: 1px; margin-top: 2px; padding: 5px 8px; border-radius: 6px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
 .scard-decision .dq { color: var(--text); overflow-wrap: anywhere; }
 .scard-decision .din { color: var(--warn); font-weight: 600; }
@@ -355,14 +360,14 @@ button { font: inherit; color: inherit; }
 .scard-head .smodel { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .scard-head .state { font-size: 12px; color: var(--text-2); margin-left: auto; white-space: nowrap; }
 .scard-head .state.s-waiting { color: var(--accent); font-weight: 500; }
-.scard-head .state.s-blocked { color: var(--bad); font-weight: 500; }
+.scard-head .state.s-blocked { color: var(--warn); font-weight: 600; }
 .scard-now { font-size: 12px; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .scard-foot { font-size: 12px; color: var(--text-3); }
 .scard.stale { opacity: .6; }
 .scard.stale:hover { opacity: 1; }
 .sdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--ok); }
 .sdot.s-waiting { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.sdot.s-blocked { background: var(--bad); }
+.sdot.s-blocked { background: var(--warn); }
 .sdot.s-missing { background: var(--text-3); }
 
 .activity-list { display: grid; gap: 0; }
