@@ -154,6 +154,11 @@ class Composer {
     this.hint.textContent = msg || 'Enter sends, Shift+Enter new line';
   }
 
+  setStatus(msg) {
+    this.hint.className = 'hint live-hint';
+    this.hint.textContent = msg;
+  }
+
   chooseOption(idx, text) {
     const cur = this.textarea.value;
     let rest = cur;
@@ -206,30 +211,45 @@ class Composer {
     const base = this.textarea.value;
     const sep = base && !/\s$/.test(base) ? ' ' : '';
     let finals = '';
+    // What happened, so a silent failure can say why. Every event also goes to the console.
+    const seen = { audio: false, sound: false, results: 0, words: 0, error: null };
+    const log = (...a) => console.info('[dictation]', ...a);
+    log('start', { lang: rec.lang, browser: navigator.userAgent });
+    rec.onaudiostart = () => { seen.audio = true; log('audiostart'); this.setStatus('Listening. Speak now.'); };
+    rec.onsoundstart = () => { seen.sound = true; log('soundstart'); };
+    rec.onspeechstart = () => log('speechstart');
+    rec.onnomatch = () => log('nomatch');
     rec.onresult = (e) => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finals += (finals && !/\s$/.test(finals) ? ' ' : '') + r[0].transcript.trim();
-        else interim += r[0].transcript;
+        const said = (r[0]?.transcript || '').trim();
+        seen.results++;
+        if (said) seen.words++;
+        log('result', { final: r.isFinal, text: said, confidence: r[0]?.confidence });
+        if (!said) continue;
+        if (r.isFinal) finals += (finals && !/\s$/.test(finals) ? ' ' : '') + said;
+        else interim += ` ${said}`;
       }
+      if (!seen.words) return;
       this.applyingSpeech = true;
       this.textarea.value = base + sep + finals + (interim ? (finals ? ' ' : '') + interim.trim() : '');
       this.textarea.dispatchEvent(new Event('input'));
       this.applyingSpeech = false;
       const end = this.textarea.value.length;
       this.textarea.setSelectionRange(end, end);
+      this.setStatus('Listening. Speak now.');
     };
-    rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') this.setError('Microphone blocked. Allow it in the address bar.');
-      else if (e.error === 'no-speech') this.setError('Heard nothing. Try again.');
-      else if (e.error !== 'aborted') this.setError(`Dictation stopped (${e.error})`);
+    rec.onerror = (e) => { seen.error = e.error; log('error', e.error, e.message || ''); };
+    rec.onend = () => {
+      log('end', seen);
+      this.listening = false; this.rec = null; this.mic.classList.remove('listening'); this.mic.setAttribute('aria-pressed', 'false'); this.mic.title = 'Dictate';
+      this.setError(dictationProblem(seen));
     };
-    rec.onend = () => { this.listening = false; this.rec = null; this.mic.classList.remove('listening'); this.mic.setAttribute('aria-pressed', 'false'); this.mic.title = 'Dictate'; };
-    try { rec.start(); } catch { this.setError('Dictation could not start'); return; }
+    try { rec.start(); } catch (err) { log('start threw', String(err)); this.setError('Dictation could not start. Try Windows voice typing: press Win+H in the box.'); return; }
     this.rec = rec;
     this.listening = true;
-    this.setError('');
+    this.setStatus('Starting the microphone');
     this.mic.classList.add('listening');
     this.mic.setAttribute('aria-pressed', 'true');
     this.mic.title = 'Stop dictating';
@@ -269,6 +289,26 @@ class Composer {
       this.sendBtn.textContent = 'Send';
     }
   }
+}
+
+// Why a dictation run ended without words, in plain language; '' when it worked or was stopped.
+// The browser sends the audio to its own online speech service (Microsoft for Edge, Google for
+// Chrome); the page only gets back what that service returns.
+const WIN_H = 'Windows voice typing works instead: click in the box and press Win+H.';
+function dictationProblem(seen) {
+  const e = seen.error;
+  if (e === 'not-allowed') return 'Microphone blocked. Allow it from the icon in the address bar, then try again.';
+  if (e === 'service-not-allowed') return `The browser's speech service is turned off. ${WIN_H}`;
+  if (e === 'audio-capture') return 'No microphone found. Check Windows sound settings, then try again.';
+  if (e === 'network') return `The browser could not reach its online speech service. ${WIN_H}`;
+  if (e === 'language-not-supported') return `The speech service does not support ${navigator.language}. ${WIN_H}`;
+  if (e === 'no-speech') return 'Heard nothing. Check the right microphone is selected, then try again.';
+  if (e && e !== 'aborted') return `Dictation stopped (${e}). ${WIN_H}`;
+  if (seen.words) return '';
+  if (!seen.audio) return `The microphone never started. ${WIN_H}`;
+  if (seen.results) return `The speech service heard you but sent back no words. ${WIN_H}`;
+  if (!seen.sound) return 'No sound reached the page. Check the right microphone is selected.';
+  return `No words came back. ${WIN_H}`;
 }
 
 function composer(key, opts) {

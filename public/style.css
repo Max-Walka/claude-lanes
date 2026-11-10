@@ -229,7 +229,8 @@ button { font: inherit; color: inherit; }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer-bar { display: flex; align-items: center; gap: 4px; padding: 2px 6px 6px 14px; }
 .composer-bar .hint { font-size: 12px; color: var(--text-3); margin-right: auto; }
-.composer-bar .err { font-size: 12px; color: var(--bad); margin-right: auto; }
+.composer-bar .err { font-size: 12px; color: var(--bad); margin-right: auto; line-height: 1.35; padding: 2px 0; }
+.composer-bar .hint.live-hint, .qcard .composer-bar .hint.live-hint { visibility: visible; color: var(--bad); font-weight: 500; }
 .send-btn { padding: 5px 14px; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px 0; }
 .thumb { position: relative; }
