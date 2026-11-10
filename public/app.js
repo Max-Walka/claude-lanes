@@ -500,7 +500,8 @@ function splitTitle(u) {
 function stepsList(steps) {
   if (!steps || !steps.length) return null;
   return h('ol', { class: 'steps' }, steps.map((step) => {
-    const [first, ...rest] = noEmDash(step).split(/\r?\n/);
+    const [lead, ...rest] = noEmDash(step).split(/\r?\n/);
+    const first = lead.replace(/^\s*\d{1,2}[.)]\s+/, ''); // already numbered: no "1. 1."
     const subs = rest.map((l) => l.match(/^\s*[-*]\s+(.*)$/)?.[1] ?? l.trim()).filter(Boolean);
     return h('li', null, richText(first), subs.length ? h('ul', null, subs.map((x) => h('li', null, richText(x)))) : null);
   }));
@@ -737,6 +738,29 @@ function renderCardModal() {
   const it = live || recent.find((x) => x.key === modalKey);
   if (!it) { $('#card-modal').close(); return; }
   $('#card-modal-body').replaceChildren(it.card());
+  fitCardModal(it.u);
+}
+
+// A card with SQL widens the window to its widest query line (over all its
+// queries, so flipping does not jump), up to the screen width less a margin.
+// Only past that does the query scroll sideways.
+function fitCardModal(u) {
+  const d = $('#card-modal');
+  const code = $('#card-modal-body .sql-code');
+  if (!code || !u?.sql?.length) { d.style.width = ''; return; }
+  const cs = getComputedStyle(code);
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+  probe.style.font = cs.font;
+  probe.textContent = 'M'.repeat(40);
+  document.body.append(probe);
+  const ch = probe.getBoundingClientRect().width / 40;
+  probe.remove();
+  const tab = Number(cs.tabSize) || 4;
+  const widest = Math.max(...u.sql.flatMap((q) => q.query.split(/\r?\n/).map((l) => l.replace(/\t/g, ' '.repeat(tab)).length)));
+  const bs = getComputedStyle($('#card-modal-body'));
+  const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight);
+  d.style.width = `min(max(600px, ${Math.ceil(widest * ch + pad + 4)}px), calc(100vw - 48px))`;
 }
 // ---------- To do cards (inside Needs you) ----------
 // A todo stays until the person presses Done (an answer with done:true) or the
@@ -1327,8 +1351,13 @@ $('#pr-refresh').addEventListener('click', async () => {
 $('#drawer-close').addEventListener('click', () => $('#drawer').close());
 $('#drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#drawer').addEventListener('close', () => { drawerKey = null; });
-$('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; });
+$('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; $('#card-modal').style.width = ''; });
 $('#card-modal-close').addEventListener('click', () => $('#card-modal').close());
+// A click on the backdrop (outside the window) closes it; Escape does too (native dialog).
+// Only when the press also started there, so selecting query text and letting go outside does not close it.
+let cardModalDown = null;
+$('#card-modal').addEventListener('pointerdown', (e) => { cardModalDown = e.target; });
+$('#card-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget && cardModalDown === e.currentTarget) e.currentTarget.close(); });
 $('#activity-btn').addEventListener('click', () => openDrawer('activity'));
 $('#doc-close').addEventListener('click', () => $('#doc').close());
 $('#doc').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
