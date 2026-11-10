@@ -845,6 +845,7 @@ function coordMsg(u) {
     h('div', { class: 'msg-actions' },
       u.text ? copyButton(u.text) : null,
       ['ready', 'blocked'].includes(u.kind) ? h('span', { class: `kind kind-${u.kind}` }, u.kind) : null,
+      tagChips(u),
       u.pr ? prLink(u.pr) : null,
       h('span', { class: 'time', title: `Coordinator, ${u.ts}` }, fmtTime(u.t))));
 }
