@@ -1121,6 +1121,11 @@ function switchProject(i) {
 function mountMain() {
   const c = composer('main', { placeholder: 'Reply to the Coordinator' });
   $('#chat-input').replaceChildren(c.el);
+  // The reply box floats over the end of the chat; keep the last message clear of it.
+  const box = $('#chat-input');
+  const fit = () => $('#col-chat').style.setProperty('--composer-h', `${box.offsetHeight}px`);
+  new ResizeObserver(fit).observe(box);
+  fit();
 }
 
 // ---------- boot ----------
