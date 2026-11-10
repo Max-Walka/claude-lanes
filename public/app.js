@@ -544,10 +544,11 @@ function needsModel() {
   const open = qs.filter((q) => q.status === 'open').sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const recentQs = qs.filter((q) => q.status !== 'open' && (q.status === 'sent' || (q.done?.t != null && Date.now() - q.done.t < 2 * 3600e3)));
   const todos = todoModel();
+  const rank = (u) => (u.tags?.includes('urgent') ? 0 : u.tags?.includes('blocking') ? 1 : 2);
   const items = [
     ...open.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', card: () => questionCard(q) })),
     ...todos.active.map((t) => ({ key: `t:${t.id}`, u: t, kind: 'todo', card: () => todoCard(t, 'active') })),
-  ];
+  ].sort((a, b) => rank(a.u) - rank(b.u) || (b.u.t ?? 0) - (a.u.t ?? 0));
   const recent = [
     ...recentQs.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', done: true, at: q.done?.t ?? q.replies?.at(-1)?.t ?? q.t, card: () => questionCard(q) })),
     ...todos.closed.slice(0, 20).map((c) => ({ key: `t:${c.t.id}`, u: c.t, kind: 'todo', done: true, at: c.at, card: () => todoCard(c.t, 'closed') })),
@@ -573,7 +574,8 @@ function needCard(it) {
   const text = title || why.split('\n')[0] || '(no text)';
   const open = () => openCard(it.key);
   return h('div', {
-    class: `need-card ${it.done ? 'done' : ''}`, role: 'button', tabindex: '0', title: 'Open the full card',
+    class: `need-card ${it.done ? 'done' : ''} ${needsFlash?.key === it.key && Date.now() < needsFlash.until ? 'flash' : ''}`, role: 'button',
+    style: needsFlash?.key === it.key ? `animation-delay: -${Math.max(0, 2500 - (needsFlash.until - Date.now()))}ms` : null, tabindex: '0', title: 'Open the full card',
     onclick: (e) => { if (!e.target.closest('a')) open(); },
     onkeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } },
   },
@@ -585,6 +587,8 @@ function needCard(it) {
 // goes (answered, Done), the card that moves into its place shows: the next one.
 let needsCur = null;
 let needsIdx = 0;
+let needsSeen = null; // keys already shown; null until the first render
+let needsFlash = null; // { key, until }
 function needsPage(delta) { needsIdx += delta; needsCur = null; renderNeeds(); }
 
 function needRow(it) {
@@ -607,6 +611,16 @@ function renderNeeds() {
   tc.textContent = String(total);
   document.title = total ? `(${total}) Lanes` : 'Lanes';
 
+  // A card that was not there before: show it (the highest placed if several) and flash it.
+  if (needsSeen) {
+    const fresh = items.find((c) => !needsSeen.has(c.key));
+    if (fresh) {
+      needsCur = fresh.key;
+      needsFlash = { key: fresh.key, until: Date.now() + 2500 };
+      setTimeout(() => { if (needsFlash && Date.now() >= needsFlash.until) { needsFlash = null; renderNeeds(); } }, 2600);
+    }
+  }
+  needsSeen = new Set(items.map((c) => c.key));
   const at = items.findIndex((c) => c.key === needsCur);
   needsIdx = Math.max(0, Math.min(at >= 0 ? at : needsIdx, items.length - 1));
   needsCur = items[needsIdx]?.key ?? null;
@@ -1196,6 +1210,7 @@ function connect() {
 
 function switchProject(i) {
   projectIndex = i;
+  needsSeen = null; needsCur = null; needsIdx = 0; // a new project's cards are not "new"
   store.set('project', i);
   const u = new URL(location.href);
   u.searchParams.set('p', String(i));
