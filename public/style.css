@@ -337,7 +337,7 @@ button { font: inherit; color: inherit; }
 .done-today .dt-meta { color: var(--text-3); }
 .done-today .dt-meta b { color: var(--text-2); font-weight: 600; }
 .scard-head { display: flex; align-items: center; gap: 7px; }
-.scard-head .name { font-weight: 600; }
+.scard-head .name { font-weight: 600; white-space: nowrap; }
 .scard-head .smodel { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .scard-head .state { font-size: 12px; color: var(--text-2); margin-left: auto; white-space: nowrap; }
 .scard-head .state.s-waiting { color: var(--accent); font-weight: 500; }
