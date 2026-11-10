@@ -482,7 +482,9 @@ button { font: inherit; color: inherit; }
 .ready-detail .r-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
 .ready-detail .r-todo { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
 .ready-detail .gh-link { justify-self: start; }
-.ready-detail .card-title, .ready-detail .card-why, .ntag { font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 4px; line-height: 18px; }
+.ready-detail .r-todo .card-title { font-size: 13px; }
+.ready-detail .r-todo .card-why { font-size: 12px; }
+.ntag { font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 4px; line-height: 18px; }
 .ntag.decide { background: var(--accent-soft); color: var(--accent); }
 .ntag.todo-tag { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .qcard.closed .ntag, .todo.closed .ntag { background: var(--surface-2); color: var(--text-3); }
