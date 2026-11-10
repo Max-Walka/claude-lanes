@@ -134,18 +134,44 @@ button { font: inherit; color: inherit; }
 .pr-refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 
 /* Needs you stands out only when something needs him. */
-.needs-panel { flex: 0 1 auto; max-height: 62%; }
-.needs-panel.has .panel-head h2 { font-size: 14px; }
-.nothing { font-size: 12px; color: var(--text-3); padding: 2px; }
-.ready-panel { flex: 1 1 auto; }
-.sessions-panel { flex: none; }
-/* Needs you: one card at a time, paged. */
+/* Needs you keeps its own space: it never shrinks for Ready to merge, and scrolls past 45%. */
+.needs-panel { flex: 0 0 auto; max-height: 45%; }
+#needs-list { gap: 2px; }
 .needs-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
 .needs-pager[hidden] { display: none; }
 .needs-pager .pager-pos { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
 .needs-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
 .needs-pager .pager-btn svg { width: 16px; height: 16px; }
 .needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
+.need-card { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; cursor: pointer; }
+.need-card:hover { border-color: var(--line); }
+.need-card .need-title { font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.need-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.tag-chip { font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.tag-chip.tag-urgent { background: var(--bad-soft); color: var(--bad); }
+.tag-chip.tag-blocking { background: color-mix(in srgb, var(--heading) 16%, transparent); color: var(--heading); }
+.need-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 8px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); text-align: left; cursor: pointer; font-size: 13px; line-height: 1.4;
+}
+.need-row:hover { background: var(--surface); }
+.need-row .ntag { flex: none; }
+.need-row .need-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.need-row .dot { flex: none; width: 7px; height: 7px; }
+.need-row.done { color: var(--text-3); }
+.need-row.done .ntag { background: var(--surface-2); color: var(--text-3); }
+/* A Needs you card opens here, in full. */
+.card-modal { width: min(600px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); }
+.card-modal::backdrop { background: rgba(0, 0, 0, .35); }
+.card-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 0 20px; }
+.card-modal-head h2 { font-size: 12px; color: var(--heading); }
+.card-modal-body { padding: 8px 20px 20px; }
+.card-modal-body .qcard, .card-modal-body .todo { padding: 0; background: none; border: 0; }
+.card-modal-body .qcard .clamp { -webkit-line-clamp: unset; display: block; }
+.needs-panel.has .panel-head h2 { font-size: 14px; }
+.nothing { font-size: 12px; color: var(--text-3); padding: 2px; }
+.ready-panel { flex: 1 1 auto; min-height: 120px; }
+.sessions-panel { flex: none; }
 /* The lane activity feed lives in a drawer, for debugging. */
 .activity-link { align-self: flex-start; border: 0; background: none; padding: 2px; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .activity-link:hover { color: var(--text); text-decoration: underline; }
@@ -167,18 +193,18 @@ button { font: inherit; color: inherit; }
 
 /* ---------- ready to merge ---------- */
 .mo-note { font-size: 12px; color: var(--text-2); padding: 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ready { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); }
-.ready summary { list-style: none; cursor: pointer; padding: 8px 10px; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
-.ready summary::-webkit-details-marker { display: none; }
+.ready { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); color: var(--text); }
+.ready:hover { border-color: var(--line); }
+.ready { cursor: pointer; padding: 8px 10px; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
 .ready .ord { font-weight: 600; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .ready .r-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .ready .r-top .num { font-weight: 600; flex: none; }
 .ready .r-top .title { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; min-width: 0; color: var(--text); }
 .ready .r-bottom { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--text-2); }
 .ready .owner { display: inline-flex; align-items: center; gap: 5px; }
-.ready-body { padding: 0 10px 10px 36px; display: grid; gap: 6px; font-size: 12px; color: var(--text-2); }
-.ready-body .msg-text { font-size: 12px; color: var(--text); }
-.unordered-head { font-size: 12px; color: var(--text-3); padding: 6px 2px 0; }
+.ready-detail { display: grid; gap: 10px; font-size: 13px; color: var(--text-2); }
+.ready-detail > .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.ready-detail .msg-text { font-size: 13px; color: var(--text); }
 .mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .mini .dot { width: 7px; height: 7px; }
 .mini.pass .dot { background: var(--ok); }
@@ -300,15 +326,20 @@ button { font: inherit; color: inherit; }
 }
 /* Board State looks: Working (green dot), Needs decision (amber card), Blocked (red card), Stopped (grey, dashed). */
 .scard.s-decision { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
-.scard.s-blocked { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
-.scard.s-stopped { border-style: dashed; background: var(--surface-2); }
+/* Needs a restart (Handing off, Stopped): red. Blocked and Needs decision: orange. */
+.scard.s-restart { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.scard.s-blocked { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.scard-head .state.s-restart { color: var(--bad); font-weight: 600; }
+.scard-head .state.s-other { color: var(--text-2); font-weight: 500; }
+.sdot.s-restart { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+.sdot.s-other { background: var(--text-3); }
+.scard-restart { font-size: 12px; font-weight: 600; color: var(--bad); }
+.stale-chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
 .scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
-.scard-head .state.s-stopped { color: var(--text-3); font-weight: 500; }
 .scard-head .state.s-working { color: var(--ok); }
 .sdot.s-decision { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
-.sdot.s-stopped { background: transparent; border: 1.5px solid var(--text-3); }
 .scard-meta { font-size: 12px; color: var(--text-3); }
-.scard-blocked { font-size: 12px; color: var(--bad); overflow-wrap: anywhere; }
+.scard-blocked { font-size: 12px; color: var(--warn); overflow-wrap: anywhere; }
 .scard-decision { font-size: 12px; display: grid; gap: 1px; margin-top: 2px; padding: 5px 8px; border-radius: 6px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
 .scard-decision .dq { color: var(--text); overflow-wrap: anywhere; }
 .scard-decision .din { color: var(--warn); font-weight: 600; }
@@ -325,18 +356,18 @@ button { font: inherit; color: inherit; }
 .done-today .dt-meta { color: var(--text-3); }
 .done-today .dt-meta b { color: var(--text-2); font-weight: 600; }
 .scard-head { display: flex; align-items: center; gap: 7px; }
-.scard-head .name { font-weight: 600; }
+.scard-head .name { font-weight: 600; white-space: nowrap; }
 .scard-head .smodel { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .scard-head .state { font-size: 12px; color: var(--text-2); margin-left: auto; white-space: nowrap; }
 .scard-head .state.s-waiting { color: var(--accent); font-weight: 500; }
-.scard-head .state.s-blocked { color: var(--bad); font-weight: 500; }
+.scard-head .state.s-blocked { color: var(--warn); font-weight: 600; }
 .scard-now { font-size: 12px; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .scard-foot { font-size: 12px; color: var(--text-3); }
 .scard.stale { opacity: .6; }
 .scard.stale:hover { opacity: 1; }
 .sdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--ok); }
 .sdot.s-waiting { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.sdot.s-blocked { background: var(--bad); }
+.sdot.s-blocked { background: var(--warn); }
 .sdot.s-missing { background: var(--text-3); }
 
 .activity-list { display: grid; gap: 0; }
@@ -452,20 +483,12 @@ button { font: inherit; color: inherit; }
 .todo.waiting .msg-text { color: var(--text-2); }
 .todo.closed { background: transparent; border-color: var(--line); color: var(--text-2); }
 .todo.closed .msg-text { color: var(--text-2); }
-.after-note { font-size: 12px; line-height: 18px; color: var(--text-2); padding: 0 10px 0 36px; margin-top: -2px; min-width: 0; }
-.after-note summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.after-note summary::-webkit-details-marker { display: none; }
-.after-note summary::before { content: "\25B8"; display: inline-block; width: 12px; color: var(--text-3); }
-.after-note[open] summary::before { content: "\25BE"; }
-.after-note[open] summary { white-space: normal; }
-.after-note b { font-weight: 600; color: var(--accent); }
-.after-note .an-body { display: grid; gap: 6px; margin: 6px 0 4px 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--text); }
-.ready-body .r-sec { display: grid; gap: 4px; }
-.ready-body .r-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
-.ready-body .r-todo { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
-.ready-body .gh-link { justify-self: start; }
-.ready-body .card-title, .after-note .card-title { font-size: 13px; }
-.ready-body .card-why, .after-note .card-why { font-size: 12px; }
+.ready-detail .r-sec { display: grid; gap: 4px; }
+.ready-detail .r-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.ready-detail .r-todo { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
+.ready-detail .gh-link { justify-self: start; }
+.ready-detail .r-todo .card-title { font-size: 13px; }
+.ready-detail .r-todo .card-why { font-size: 12px; }
 .ntag { font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 4px; line-height: 18px; }
 .ntag.decide { background: var(--accent-soft); color: var(--accent); }
 .ntag.todo-tag { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
@@ -485,4 +508,4 @@ button { font: inherit; color: inherit; }
 .todo.closed .card-title { text-decoration: line-through; text-decoration-color: var(--line-strong); }
 
 /* Section headers in one warm orange (darker in light mode so it stays readable). */
-.checking-head, .dsection h3 { color: var(--heading); }
+.dsection h3 { color: var(--heading); }
