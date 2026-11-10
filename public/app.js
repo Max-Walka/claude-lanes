@@ -543,6 +543,22 @@ function readyRow(n, ord) {
       p?.url ? h('a', { href: p.url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null));
 }
 
+// A lane-reported ready PR outside the merge order: one quiet line, no number, no merge look.
+function checkingRow(n) {
+  const p = state.prs?.[n];
+  const owner = ownerOf(n);
+  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
+  const title = prLabel(n) || (p && p.ok ? shortTitle(p.title) : (laneLine ? noEmDash(laneLine.text).slice(0, 80) : ''));
+  return h('div', { class: 'checking' },
+    h('span', { class: 'c-top' },
+      p && p.ok ? h('a', { class: 'num', href: p.url, target: '_blank', rel: 'noreferrer' }, `#${n}`) : h('span', { class: 'num' }, `#${n}`),
+      h('span', { class: 'title', title }, title)),
+    h('span', { class: 'c-bottom' },
+      owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
+      h('span', null, 'not in the merge order'),
+      ciMini(p)));
+}
+
 function renderReady() {
   const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator');
   // Exactly the latest merge order, keeping its numbers (a merged PR drops out, the others keep theirs).
@@ -564,15 +580,17 @@ function renderReady() {
     }
   };
   ordered.forEach((x) => row(x.n, x.ord));
+  if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
+  // A lane says it is ready but the Coordinator has not put it in the order: not mergeable yet.
   if (rest.length) {
-    if (ordered.length) nodes.push(h('div', { class: 'unordered-head' }, 'Not in the order yet'));
-    rest.forEach((n) => row(n, null));
+    nodes.push(h('div', { class: 'checking-head', title: 'A lane says these are ready. They are not in the merge order from the Coordinator, so do not merge them yet.' },
+      `Being checked by the Coordinator (${rest.length})`));
+    rest.forEach((n) => nodes.push(checkingRow(n)));
   }
-  if (!nodes.length || (!ordered.length && !rest.length)) nodes.splice(0, nodes.length, h('div', { class: 'nothing' }, 'Nothing to merge'));
 
   // "2 of 7 open": ready rows against every open PR by the account the lanes push as.
   const om = state.openMine;
-  const readyCount = ordered.length + rest.length;
+  const readyCount = ordered.length;
   const rc = $('#ready-count');
   if (om) {
     const list = om.numbers.map((n) => `#${n}`).join(', ');
