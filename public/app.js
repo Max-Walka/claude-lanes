@@ -414,6 +414,8 @@ const ICONS = {
   send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  prev: '<path d="m14.5 6-6 6 6 6"/>',
+  next: '<path d="m9.5 6 6 6-6 6"/>',
 };
 function icon(name) {
   const s = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`, 'image/svg+xml');
@@ -533,6 +535,12 @@ function questionCard(q) {
       last && last.choice != null && q.options[last.choice] ? `. You chose "${q.options[last.choice]}"` : ''));
 }
 
+// Needs you shows one card at a time. needsCur is the shown card's key; when it
+// goes (answered, Done), the card that moves into its place is shown: the next one.
+let needsCur = null;
+let needsIdx = 0;
+function needsPage(delta) { needsIdx += delta; needsCur = null; renderNeeds(); $('#needs-list .qcard, #needs-list .todo')?.scrollIntoView?.({ block: 'nearest' }); }
+
 function renderNeeds() {
   const qs = state.needs.questions;
   const open = qs.filter((q) => q.status === 'open').sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
@@ -550,8 +558,19 @@ function renderNeeds() {
   tc.textContent = String(total);
   document.title = total ? `(${total}) Lanes` : 'Lanes';
 
-  const nodes = [...open.map(questionCard), ...todos.active.map((t) => todoCard(t, 'active'))];
-  if (!nodes.length) nodes.push(h('div', { class: 'nothing' }, 'Nothing needs you.'));
+  const cards = [...open.map((q) => ({ key: `q:${q.id}`, node: () => questionCard(q) })), ...todos.active.map((t) => ({ key: `t:${t.id}`, node: () => todoCard(t, 'active') }))];
+  const at = cards.findIndex((c) => c.key === needsCur);
+  needsIdx = Math.max(0, Math.min(at >= 0 ? at : needsIdx, cards.length - 1));
+  needsCur = cards[needsIdx]?.key ?? null;
+  const pager = $('#needs-pager');
+  pager.hidden = cards.length < 2;
+  if (cards.length > 1) {
+    pager.replaceChildren(
+      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous', 'aria-label': 'Previous card', disabled: needsIdx === 0 ? true : null, onclick: () => needsPage(-1) }, icon('prev')),
+      h('span', { class: 'pager-pos', 'aria-live': 'polite' }, `${needsIdx + 1} of ${cards.length}`),
+      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next', 'aria-label': 'Next card', disabled: needsIdx === cards.length - 1 ? true : null, onclick: () => needsPage(1) }, icon('next')));
+  }
+  const nodes = cards.length ? [cards[needsIdx].node()] : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
   const recent = [
     ...recentQs.map((q) => ({ at: q.done?.t ?? q.replies?.at(-1)?.t ?? q.t, node: () => questionCard(q) })),
     ...todos.closed.slice(0, 20).map((c) => ({ at: c.at, node: () => todoCard(c.t, 'closed') })),
@@ -971,15 +990,16 @@ function renderSessions() {
   if (focused) document.querySelector(`#session-cards [data-card="${focused}"]`)?.focus();
 }
 
-function renderActivity() {
+// Every lane update, newest first. Only in the Activity log drawer (for debugging).
+function activityList() {
   const items = state.updates.filter((u) => u.fromKey && u.fromKey !== 'coordinator' && u.kind !== 'done').slice(0, 150);
-  $('#activity').replaceChildren(...(items.length ? [h('div', { class: 'activity-list' }, items.map((u) => {
+  return items.length ? h('div', { class: 'activity-list' }, items.map((u) => {
     const id = `act:${u.line}`;
     const open = expanded.has(id);
-    return h('button', { type: 'button', class: `act ${open ? 'open' : ''}`, 'aria-expanded': String(open), onclick: () => { open ? expanded.delete(id) : expanded.add(id); renderActivity(); } },
+    return h('button', { type: 'button', class: `act ${open ? 'open' : ''}`, 'aria-expanded': String(open), onclick: () => { open ? expanded.delete(id) : expanded.add(id); renderDrawer(); } },
       h('div', { class: 'act-meta' }, dot(u.fromKey), h('span', null, [u.from, u.kind, u.pr ? `#${u.pr}` : null, u.to && !/^coordinator$/i.test(u.to) ? `to ${u.to}` : null].filter(Boolean).join(' · ')), h('span', { class: 'time', title: u.ts }, fmtTime(u.t))),
       u.text ? h('div', { class: 'act-text' }, noEmDash(u.text)) : null);
-  }))] : [h('div', { class: 'nothing' }, 'No lane updates yet.')]));
+  })) : h('div', { class: 'nothing' }, 'No lane updates yet.');
 }
 
 // ---------- drawer ----------
@@ -996,6 +1016,11 @@ function openDrawer(key) {
 
 function renderDrawer() {
   if (!drawerKey) return;
+  if (drawerKey === 'activity') {
+    $('#drawer-title').replaceChildren('Activity log', h('span', { class: 'updated' }, 'every lane update, newest first'));
+    $('#drawer-body').replaceChildren(activityList());
+    return;
+  }
   const s = sessionOf(drawerKey);
   const st = state.sessions[drawerKey];
   const ss = sessionStatus(drawerKey);
@@ -1061,7 +1086,6 @@ function render() {
   renderReady();
   renderChat();
   renderSessions();
-  renderActivity();
   if ($('#drawer').open) renderDrawer();
   if (c && document.contains(c.textarea)) {
     c.textarea.focus({ preventScroll: true });
@@ -1153,6 +1177,7 @@ $('#pr-refresh').addEventListener('click', async () => {
 $('#drawer-close').addEventListener('click', () => $('#drawer').close());
 $('#drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#drawer').addEventListener('close', () => { drawerKey = null; });
+$('#activity-btn').addEventListener('click', () => openDrawer('activity'));
 $('#doc-close').addEventListener('click', () => $('#doc').close());
 $('#doc').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
