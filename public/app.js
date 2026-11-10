@@ -2,12 +2,10 @@
 // Everything from files is set as text, except plan/coordinator markdown,
 // which the server renders with raw HTML escaped.
 
-const SESSIONS = [
-  { key: 'coordinator', name: 'Coordinator' },
-  { key: 'lane-a', name: 'Lane A' },
-  { key: 'lane-b', name: 'Lane B' },
-  { key: 'lane-c', name: 'Lane C' },
-];
+// The coordinator plus every lane the server found (one per lane-*.md file).
+// Replaced from each state the server sends, so a new lane appears by itself.
+let SESSIONS = [{ key: 'coordinator', name: 'Coordinator' }];
+const PALETTE_SIZE = 8;
 const STALE_MS = 15 * 60 * 1000; // a board not updated for 15 min is "stale"
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const NEAR_BOTTOM_PX = 120;
@@ -39,9 +37,24 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
-const sessionOf = (key) => SESSIONS.find((s) => s.key === key);
+// A lane named on a line but without a status file yet still gets a name.
+const sessionOf = (key) => SESSIONS.find((s) => s.key === key) || (key ? { key, name: laneName(key) } : null);
+function laneName(key) {
+  const id = String(key).replace(/^lane-/, '');
+  return `Lane ${id.length === 1 ? id.toUpperCase() : id[0].toUpperCase() + id.slice(1)}`;
+}
 const keyOfName = (name) => SESSIONS.find((s) => s.name.toLowerCase() === String(name || '').toLowerCase())?.key || null;
-const dot = (key) => h('span', { class: `dot ${key || ''}`, 'aria-hidden': 'true' });
+// Each lane keeps one colour: lane-a is colour 0, lane-b 1 and so on, so
+// colours do not shift when a lane is added. Other ids get a stable hash.
+function laneColour(key) {
+  const id = String(key || '').replace(/^lane-/, '');
+  if (/^[a-z]$/.test(id)) return (id.charCodeAt(0) - 97) % PALETTE_SIZE;
+  let n = 0;
+  for (const c of id) n = (n * 31 + c.charCodeAt(0)) >>> 0;
+  return n % PALETTE_SIZE;
+}
+const colourClass = (key) => (key === 'coordinator' ? 'coordinator' : key ? `pal-${laneColour(key)}` : '');
+const dot = (key) => h('span', { class: `dot ${colourClass(key)}`, 'aria-hidden': 'true' });
 
 function fmtTime(t) {
   if (t == null) return '';
@@ -1299,6 +1312,7 @@ function connect() {
   es.addEventListener('error', () => { live.className = 'live off'; live.lastChild.textContent = 'Reconnecting'; });
   es.addEventListener('state', (e) => {
     try { state = JSON.parse(e.data); } catch { return; }
+    if (Array.isArray(state.sessionList) && state.sessionList.length) SESSIONS = state.sessionList;
     live.className = 'live on'; live.lastChild.textContent = 'Live';
     render();
   });

@@ -21,6 +21,8 @@ Lanes work in their own worktrees.
 1. <task>
 2. <task>
 
+(One section per lane; add Lane D, Lane E and so on when you add lanes.)
+
 ## Shared files (claim on your status file and message the other lanes before editing)
 `<path>`, `<path>`.
 Keep those edits small; their PRs merge first.

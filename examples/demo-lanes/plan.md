@@ -22,6 +22,10 @@ Lanes work in their own worktrees.
 2. Rate limits on the public routes.
 3. Remove the old cart service.
 
+### Lane D: email (started 15 Jan)
+1. Email receipts on the new template.
+2. Shipping updates.
+
 ## Shared files (claim on your status file and tell the other lanes first)
 `src/app/nav.ts`, `src/api/routes.ts`, `package.json`.
 
