@@ -137,6 +137,19 @@ button { font: inherit; color: inherit; }
 /* Needs you keeps its own space: it never shrinks for Ready to merge, and scrolls past 45%. */
 .needs-panel { flex: 0 0 auto; max-height: 45%; }
 #needs-list { gap: 2px; }
+.needs-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
+.needs-pager[hidden] { display: none; }
+.needs-pager .pager-pos { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.needs-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
+.needs-pager .pager-btn svg { width: 16px; height: 16px; }
+.needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
+.need-card { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; cursor: pointer; }
+.need-card:hover { border-color: var(--line); }
+.need-card .need-title { font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.need-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.tag-chip { font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.tag-chip.tag-urgent { background: var(--bad-soft); color: var(--bad); }
+.tag-chip.tag-blocking { background: color-mix(in srgb, var(--heading) 16%, transparent); color: var(--heading); }
 .need-row {
   display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 8px; border: 0; border-radius: 8px;
   background: none; color: var(--text); text-align: left; cursor: pointer; font-size: 13px; line-height: 1.4;
@@ -180,17 +193,18 @@ button { font: inherit; color: inherit; }
 
 /* ---------- ready to merge ---------- */
 .mo-note { font-size: 12px; color: var(--text-2); padding: 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ready { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); }
-.ready summary { list-style: none; cursor: pointer; padding: 8px 10px; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
-.ready summary::-webkit-details-marker { display: none; }
+.ready { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); color: var(--text); }
+.ready:hover { border-color: var(--line); }
+.ready { cursor: pointer; padding: 8px 10px; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
 .ready .ord { font-weight: 600; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .ready .r-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .ready .r-top .num { font-weight: 600; flex: none; }
 .ready .r-top .title { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; min-width: 0; color: var(--text); }
 .ready .r-bottom { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--text-2); }
 .ready .owner { display: inline-flex; align-items: center; gap: 5px; }
-.ready-body { padding: 0 10px 10px 36px; display: grid; gap: 6px; font-size: 12px; color: var(--text-2); }
-.ready-body .msg-text { font-size: 12px; color: var(--text); }
+.ready-detail { display: grid; gap: 10px; font-size: 13px; color: var(--text-2); }
+.ready-detail > .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.ready-detail .msg-text { font-size: 13px; color: var(--text); }
 .mini { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .mini .dot { width: 7px; height: 7px; }
 .mini.pass .dot { background: var(--ok); }
@@ -464,21 +478,11 @@ button { font: inherit; color: inherit; }
 .todo.waiting .msg-text { color: var(--text-2); }
 .todo.closed { background: transparent; border-color: var(--line); color: var(--text-2); }
 .todo.closed .msg-text { color: var(--text-2); }
-.after-note { font-size: 12px; line-height: 18px; color: var(--text-2); padding: 0 10px 0 36px; margin-top: -2px; min-width: 0; }
-.after-note summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.after-note summary::-webkit-details-marker { display: none; }
-.after-note summary::before { content: "\25B8"; display: inline-block; width: 12px; color: var(--text-3); }
-.after-note[open] summary::before { content: "\25BE"; }
-.after-note[open] summary { white-space: normal; }
-.after-note b { font-weight: 600; color: var(--accent); }
-.after-note .an-body { display: grid; gap: 6px; margin: 6px 0 4px 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--text); }
-.ready-body .r-sec { display: grid; gap: 4px; }
-.ready-body .r-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
-.ready-body .r-todo { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
-.ready-body .gh-link { justify-self: start; }
-.ready-body .card-title, .after-note .card-title { font-size: 13px; }
-.ready-body .card-why, .after-note .card-why { font-size: 12px; }
-.ntag { font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 4px; line-height: 18px; }
+.ready-detail .r-sec { display: grid; gap: 4px; }
+.ready-detail .r-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.ready-detail .r-todo { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
+.ready-detail .gh-link { justify-self: start; }
+.ready-detail .card-title, .ready-detail .card-why, .ntag { font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 4px; line-height: 18px; }
 .ntag.decide { background: var(--accent-soft); color: var(--accent); }
 .ntag.todo-tag { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .qcard.closed .ntag, .todo.closed .ntag { background: var(--surface-2); color: var(--text-3); }

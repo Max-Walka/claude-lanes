@@ -414,6 +414,8 @@ const ICONS = {
   send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  prev: '<path d="m14.5 6-6 6 6 6"/>',
+  next: '<path d="m9.5 6 6 6-6 6"/>',
 };
 function icon(name) {
   const s = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`, 'image/svg+xml');
@@ -525,7 +527,7 @@ function questionCard(q) {
   }
   const last = q.replies?.at(-1);
   return h('article', { class: `qcard ${open ? 'open' : 'closed'}`, id: `q-${q.id}`, dataset: { open: open ? '1' : '' } },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'ntag decide' }, 'Decide'), aboutChip(q), h('span', { class: 'time', title: q.ts }, fmtTime(q.t))),
+    h('div', { class: 'msg-meta' }, kindTag('decide'), aboutChip(q), tagChips(q), h('span', { class: 'time', title: q.ts }, fmtTime(q.t))),
     cardBody(q, { clampId: `qx:${q.id}`, rerender: renderNeeds }),
     open && c.optionButtons.length ? h('div', { class: 'options' }, c.optionButtons) : null,
     open ? c.el : h('div', { class: `qstatus ${q.status === 'settled' ? 'settled' : ''}` },
@@ -553,14 +555,43 @@ function needsModel() {
   return { open, todos, items, recent };
 }
 
+// Tags from the line ("tags":["urgent"]), plus "after merge" for after:"merge" to dos.
+function tagsOf(u) {
+  const tags = [...(u.tags || [])];
+  if (u.after === 'merge' && !tags.includes('after merge')) tags.push('after merge');
+  return tags;
+}
+function tagChips(u) {
+  return tagsOf(u).map((t) => h('span', { class: `tag-chip tag-${t.replace(/[^a-z0-9]+/g, '-')}` }, t));
+}
+
+const kindTag = (kind) => h('span', { class: `ntag ${kind === 'decide' ? 'decide' : 'todo-tag'}` }, kind === 'decide' ? 'Question' : 'To do');
+
+// The compact card: kind, lane, PR, tags and the whole title. Click for the rest.
+function needCard(it) {
+  const { title, why } = splitTitle(it.u);
+  const text = title || why.split('\n')[0] || '(no text)';
+  const open = () => openCard(it.key);
+  return h('div', {
+    class: `need-card ${it.done ? 'done' : ''}`, role: 'button', tabindex: '0', title: 'Open the full card',
+    onclick: (e) => { if (!e.target.closest('a')) open(); },
+    onkeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } },
+  },
+    h('div', { class: 'need-meta' }, kindTag(it.kind), aboutChip({ ...it.u, pr: null }), it.u.pr ? prLink(it.u.pr) : null, tagChips(it.u)),
+    h('div', { class: 'need-title' }, richText(text)));
+}
+
+// Needs you shows one card at a time. needsCur is the shown card's key; when it
+// goes (answered, Done), the card that moves into its place shows: the next one.
+let needsCur = null;
+let needsIdx = 0;
+function needsPage(delta) { needsIdx += delta; needsCur = null; renderNeeds(); }
+
 function needRow(it) {
   const { title, why } = splitTitle(it.u);
   const text = title || why.split('\n')[0] || '(no text)';
-  const key = it.u.aboutKey || (it.u.fromKey && it.u.fromKey !== 'coordinator' ? it.u.fromKey : null);
-  return h('button', { type: 'button', class: `need-row ${it.done ? 'done' : ''}`, title: text, onclick: () => openCard(it.key) },
-    h('span', { class: `ntag ${it.kind === 'decide' ? 'decide' : 'todo-tag'}` }, it.kind === 'decide' ? 'Decide' : 'To do'),
-    h('span', { class: 'need-title' }, noEmDash(text)),
-    key ? dot(key) : null);
+  return h('button', { type: 'button', class: 'need-row done', title: text, onclick: () => openCard(it.key) },
+    kindTag(it.kind), h('span', { class: 'need-title' }, noEmDash(text)));
 }
 
 function renderNeeds() {
@@ -576,7 +607,18 @@ function renderNeeds() {
   tc.textContent = String(total);
   document.title = total ? `(${total}) Lanes` : 'Lanes';
 
-  const nodes = items.length ? items.map(needRow) : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
+  const at = items.findIndex((c) => c.key === needsCur);
+  needsIdx = Math.max(0, Math.min(at >= 0 ? at : needsIdx, items.length - 1));
+  needsCur = items[needsIdx]?.key ?? null;
+  const pager = $('#needs-pager');
+  pager.hidden = items.length < 2;
+  if (items.length > 1) {
+    pager.replaceChildren(
+      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous', 'aria-label': 'Previous card', disabled: needsIdx === 0 ? true : null, onclick: () => needsPage(-1) }, icon('prev')),
+      h('span', { class: 'pager-pos', 'aria-live': 'polite' }, `${needsIdx + 1} of ${items.length}`),
+      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next', 'aria-label': 'Next card', disabled: needsIdx === items.length - 1 ? true : null, onclick: () => needsPage(1) }, icon('next')));
+  }
+  const nodes = items.length ? [needCard(items[needsIdx])] : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
   if (recent.length) {
     const showing = expanded.has('recent');
     nodes.push(h('button', { type: 'button', class: 'more', style: 'color:var(--text-2)', onclick: () => { showing ? expanded.delete('recent') : expanded.add('recent'); renderNeeds(); } },
@@ -589,7 +631,7 @@ function renderNeeds() {
 
 function openCard(key) {
   const { items } = needsModel();
-  modalLive = items.some((x) => x.key === key);
+  modalLive = !key.startsWith('r:') && items.some((x) => x.key === key);
   modalKey = key;
   renderCardModal();
   const d = $('#card-modal');
@@ -601,6 +643,12 @@ function openCard(key) {
 let modalLive = false;
 function renderCardModal() {
   if (!modalKey) return;
+  if (modalKey.startsWith('r:')) {
+    $('#card-modal-title').textContent = 'Ready to merge';
+    $('#card-modal-body').replaceChildren(readyDetail(Number(modalKey.slice(2))));
+    return;
+  }
+  $('#card-modal-title').textContent = 'Needs you';
   const { items, recent } = needsModel();
   const live = items.find((x) => x.key === modalKey);
   if (modalLive && !live) { $('#card-modal').close(); return; }
@@ -639,7 +687,7 @@ function todoCard(t, mode) {
     },
   }, 'Done') : null;
   return h('article', { class: `todo ${mode}`, id: `todo-${t.id}` },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'ntag todo-tag' }, 'To do'), aboutChip({ ...t, pr: null }), t.pr ? prLink(t.pr) : null,
+    h('div', { class: 'msg-meta' }, kindTag('todo'), aboutChip({ ...t, pr: null }), t.pr ? prLink(t.pr) : null, tagChips(t),
       mode === 'waiting' ? h('span', null, `after #${t.pr} merges`) : null,
       h('span', { class: 'time', title: t.ts }, fmtTime(t.t))),
     cardBody(t, { clampId: `tx:${t.id}`, rerender: renderNeeds }),
@@ -672,35 +720,53 @@ function prTodos(n) {
 }
 
 function todoBlock(t, idPrefix) {
-  return h('div', { class: 'r-todo' }, cardBody(t, { clampId: `${idPrefix}:${t.id}`, rerender: renderReady }));
+  return h('div', { class: 'r-todo' }, tagsOf(t).length ? h('div', { class: 'need-meta' }, tagChips(t)) : null, cardBody(t, { clampId: `${idPrefix}:${t.id}`, rerender: renderCardModal }));
+}
+
+function readyTitle(n) {
+  const p = state.prs?.[n];
+  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
+  return prLabel(n) || (p && p.ok ? shortTitle(p.title) : (laneLine ? noEmDash(laneLine.text).slice(0, 80) : ''));
 }
 
 function readyRow(n, ord) {
   const p = state.prs?.[n];
   const owner = ownerOf(n);
-  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
-  // What it does: the Coordinator's latest ready line for this PR (plain words, no file names).
+  const title = readyTitle(n);
+  const open = () => openCard(`r:${n}`);
+  return h('div', {
+    class: 'ready', role: 'button', tabindex: '0', title: 'Open what it does and what to check',
+    onclick: (e) => { if (!e.target.closest('a')) open(); },
+    onkeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } },
+  },
+    h('span', { class: 'ord' }, ord == null ? '' : String(ord)),
+    h('span', { class: 'r-top' },
+      p && p.ok ? h('a', { class: 'num', href: p.url, target: '_blank', rel: 'noreferrer' }, `#${n}`) : h('span', { class: 'num' }, `#${n}`),
+      h('span', { class: 'title', title }, title)),
+    h('span', { class: 'r-bottom' },
+      owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
+      ciMini(p)));
+}
+
+// The modal for a ready PR: what it does, to dos before and after merging, the link.
+function readyDetail(n) {
+  const p = state.prs?.[n];
+  const owner = ownerOf(n);
   const coordLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey === 'coordinator');
-  const title = prLabel(n) || (p && p.ok ? shortTitle(p.title) : (laneLine ? noEmDash(laneLine.text).slice(0, 80) : ''));
+  const laneLine = state.updates.find((u) => u.kind === 'ready' && u.pr === n && u.fromKey !== 'coordinator');
   const todos = prTodos(n);
   const afterMerge = todos.filter((t) => t.after === 'merge');
   const before = todos.filter((t) => t.after !== 'merge');
-  const id = `ready:${n}`;
   const section = (label, kids) => h('div', { class: 'r-sec' }, h('div', { class: 'r-label' }, label), kids);
-  return h('details', { class: 'ready', open: expanded.has(id) ? true : null, ontoggle: (e) => { const was = expanded.has(id); e.target.open ? expanded.add(id) : expanded.delete(id); if (was !== e.target.open) renderReady(); } },
-    h('summary', null,
-      h('span', { class: 'ord' }, ord == null ? '' : String(ord)),
-      h('span', { class: 'r-top' },
-        p && p.ok ? h('a', { class: 'num', href: p.url, target: '_blank', rel: 'noreferrer', onclick: (e) => e.stopPropagation() }, `#${n}`) : h('span', { class: 'num' }, `#${n}`),
-        h('span', { class: 'title', title }, title)),
-      h('span', { class: 'r-bottom' },
-        owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
-        ciMini(p))),
-    h('div', { class: 'ready-body' },
-      section('What it does', coordLine ? h('div', { class: 'msg-text blk' }, block(coordLine.text)) : h('div', { class: 'muted' }, 'No summary from the Coordinator yet.')),
-      before.length ? section('Before you merge', before.map((t) => todoBlock(t, 'rb'))) : null,
-      afterMerge.length ? section('Check on staging after merging', afterMerge.map((t) => todoBlock(t, 'ra'))) : null,
-      p?.url ? h('a', { href: p.url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null));
+  const url = p?.url || null;
+  return h('div', { class: 'ready-detail' },
+    h('div', { class: 'need-meta' }, url ? h('a', { href: url, target: '_blank', rel: 'noreferrer' }, `#${n}`) : h('span', null, `#${n}`),
+      owner ? h('span', { class: 'chip-about' }, dot(owner), sessionOf(owner).name) : null, ciMini(p)),
+    h('div', { class: 'card-title' }, readyTitle(n)),
+    section('What it does', coordLine || laneLine ? h('div', { class: 'msg-text blk' }, block((coordLine || laneLine).text)) : h('div', { class: 'muted' }, 'No summary yet.')),
+    before.length ? section('Before you merge', before.map((t) => todoBlock(t, 'rb'))) : null,
+    afterMerge.length ? section('Check on staging after merging', afterMerge.map((t) => todoBlock(t, 'ra'))) : null,
+    url ? h('a', { href: url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null);
 }
 
 function renderReady() {
@@ -708,19 +774,7 @@ function renderReady() {
   // Exactly the latest merge order, keeping its numbers (a merged PR drops out, the others keep theirs).
   const ordered = (mo ? mo.prs.map((n, i) => ({ n, ord: i + 1 })) : []).filter((x) => !isGone(x.n));
   const nodes = [];
-  // A todo waiting on a ready PR shows as a line under that PR's row; click it for the full todo.
-  const waiting = todoModel().waiting;
-  const row = (n, ord) => {
-    nodes.push(readyRow(n, ord));
-    if (expanded.has(`ready:${n}`)) return; // the open row already shows these in full
-    for (const t of waiting.filter((x) => x.pr === n)) {
-      const id = `after:${t.id}`;
-      nodes.push(h('details', { class: 'after-note', open: expanded.has(id) ? true : null, ontoggle: (e) => { e.target.open ? expanded.add(id) : expanded.delete(id); } },
-        h('summary', null, h('b', null, `After #${n} merges: `), h('span', { class: 'an-title' }, noEmDash(t.title || splitTitle(t).title || t.text))),
-        h('div', { class: 'an-body' }, cardBody(t, { clampId: `ax:${t.id}`, rerender: renderReady }))));
-    }
-  };
-  ordered.forEach((x) => row(x.n, x.ord));
+  ordered.forEach((x) => nodes.push(readyRow(x.n, x.ord)));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
   // Only a real problem is shown: one line, not one per PR.
   if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
