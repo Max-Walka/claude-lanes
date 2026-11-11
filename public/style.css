@@ -137,8 +137,20 @@ button { font: inherit; color: inherit; }
 
 /* Needs you stands out only when something needs him. */
 /* Needs you keeps its own space: it never shrinks for Ready to merge, and scrolls past 45%. */
-.needs-panel { flex: 0 0 auto; max-height: 45%; }
-#needs-list { gap: 2px; }
+.needs-panel { flex: 0 1 auto; max-height: 62%; }
+
+/* Needs you rows: a small heading with a count, then that row's carousel. */
+#needs-list { gap: 10px; }
+.need-group { display: grid; gap: 4px; min-width: 0; }
+.group-head { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 2px; }
+.group-head h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
+.group-head .group-count { color: var(--text-3); font-weight: 500; }
+.g-urgent .group-head h3 { color: var(--bad); }
+.g-wait .group-head h3 { color: var(--text-3); }
+.need-card.waiting { background: var(--surface-2); }
+.need-card.waiting .need-title { color: var(--text-2); font-weight: 500; }
+.need-card.waiting .ntag, .need-card.waiting .chip-about { opacity: .75; }
+.need-wait { font-size: 12px; color: var(--text-3); }
 .needs-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
 .needs-pager[hidden] { display: none; }
 .needs-pager .pager-pos { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import {
   sessionsFromFiles, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
-  sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey,
+  sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey, waitingReleases,
 } from './lib/parse.js';
 import { fetchPrStates } from './lib/gh.js';
 import { findModels } from './lib/models.js';
@@ -48,6 +48,9 @@ const projects = (Array.isArray(config.projects) ? config.projects : [])
     repoFolder: p.repoFolder ? path.resolve(configDir, expandHome(p.repoFolder)) : null,
     // For demos and tests: PR states from a JSON file instead of gh.
     prStateFile: p.prStateFile ? path.resolve(configDir, expandHome(p.prStateFile)) : null,
+    // Optional: a staging health URL whose JSON has a "release" commit id. Read
+    // (GET only) while a to do waits for a staging release.
+    stagingHealthUrl: typeof p.stagingHealthUrl === 'string' && /^https?:\/\//.test(p.stagingHealthUrl) ? p.stagingHealthUrl : null,
   }));
 if (!projects.length) {
   console.error(`No projects in ${configPath}. Add { "name", "lanesFolder", "repoFolder" } entries under "projects".`);
@@ -179,6 +182,7 @@ async function buildState(i) {
     prs: s.prs,
     prsFetchedAt: s.prsFetchedAt,
     prsError: s.prsError ?? null,
+    staging: s.staging ?? null,
     models: SHOW_MODELS ? models : {},
     prsFetching: !!s.prsFetching,
     now: Date.now(),
@@ -226,11 +230,36 @@ async function refreshPrs(i) {
       s.prsError = 'GitHub lookup failed';
     }
     s.prsFetchedAt = Date.now();
+    await refreshStaging(i);
   })();
   s.prsFetching = run;
   if (s.payload) { s.payload.prsFetching = true; broadcast(i); }
   try { await run; } finally { s.prsFetching = null; }
   await refreshState(i, { force: true });
+}
+
+// The release staging runs, only while an open to do waits for one. Reads
+// only the "release" field; nothing is sent.
+async function refreshStaging(i) {
+  const p = projects[i];
+  const s = projectState[i];
+  const pay = s.payload;
+  const wanted = pay ? waitingReleases(pay.updates, pay.answers) : [];
+  if (!wanted.length) return;
+  if (p.prStateFile) {
+    try { const demo = JSON.parse(await fsp.readFile(p.prStateFile, 'utf8')); s.staging = demo.staging?.release ? { release: String(demo.staging.release), at: Date.now(), error: null } : null; } catch {}
+    return;
+  }
+  if (!p.stagingHealthUrl) { s.staging = { release: null, at: Date.now(), error: 'No stagingHealthUrl in config.json' }; return; }
+  try {
+    const res = await fetch(p.stagingHealthUrl, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    const release = typeof body?.release === 'string' ? body.release.trim().slice(0, 40) : null;
+    s.staging = { release, at: Date.now(), error: release ? null : 'No release in the health answer' };
+  } catch (e) {
+    s.staging = { release: s.staging?.release ?? null, at: Date.now(), error: `Staging check failed: ${e.message || e}` };
+  }
 }
 
 function startWatching(i) {

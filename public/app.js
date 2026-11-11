@@ -621,6 +621,29 @@ function questionCard(q) {
 // card (text, steps, options or Done) in a modal. modalKey is the open card.
 let modalKey = null;
 
+// Needs you rows, in screen order. A card that fits two rows goes to the
+// first of: Urgent, Decide, Waiting, Check on staging, Do.
+const NEED_ROWS = [
+  { key: 'urgent', label: 'Urgent' },
+  { key: 'decide', label: 'Decide' },
+  { key: 'do', label: 'Do' },
+  { key: 'check', label: 'Check on staging' },
+  { key: 'wait', label: 'Waiting' },
+];
+
+// A lane restart card: "Lane D handed off ..." or "Restart Lane D ...".
+const isRestart = (u) => /^\s*(lane\s+[a-z0-9]+\s+handed\s+off|restart\s+lane\s+[a-z0-9]+)\b/i.test(splitTitle(u).title || u.text || '');
+const isCheck = (u) => u.check === 'staging' || /^\s*(check|compare|try)\b/i.test(splitTitle(u).title || u.text || '');
+
+function rowOf(it) {
+  const u = it.u;
+  if (u.tags?.includes('urgent') || u.tags?.includes('blocking') || isRestart(u)) return 'urgent';
+  if (it.kind === 'decide') return 'decide';
+  if (it.wait) return 'wait';
+  if (isCheck(u)) return 'check';
+  return 'do';
+}
+
 function needsModel() {
   const qs = state.needs.questions;
   const open = qs.filter((q) => q.status === 'open').sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
@@ -630,12 +653,35 @@ function needsModel() {
   const items = [
     ...open.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', card: () => questionCard(q) })),
     ...todos.active.map((t) => ({ key: `t:${t.id}`, u: t, kind: 'todo', card: () => todoCard(t, 'active') })),
+    ...todos.waiting.map((t) => ({ key: `t:${t.id}`, u: t, kind: 'todo', wait: waitReason(t), card: () => todoCard(t, 'waiting') })),
   ].sort((a, b) => rank(a.u) - rank(b.u) || (b.u.t ?? 0) - (a.u.t ?? 0));
+  for (const it of items) it.row = rowOf(it);
+  const rows = NEED_ROWS.map((r) => ({ ...r, items: items.filter((it) => it.row === r.key) })).filter((r) => r.items.length);
   const recent = [
     ...recentQs.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', done: true, at: q.done?.t ?? q.replies?.at(-1)?.t ?? q.t, card: () => questionCard(q) })),
     ...todos.closed.slice(0, 20).map((c) => ({ key: `t:${c.t.id}`, u: c.t, kind: 'todo', done: true, at: c.at, card: () => todoCard(c.t, 'closed') })),
   ].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
-  return { open, todos, items, recent };
+  const actionable = items.filter((it) => it.row !== 'wait');
+  return { open, todos, items, rows, actionable, recent };
+}
+
+// Why a to do cannot be done yet, or null when it can. It moves out of
+// Waiting by itself once the PR merges or staging runs the release.
+function waitReason(t) {
+  const merged = (n) => state.prs?.[n]?.state === 'MERGED';
+  if (t.after === 'merge' && t.pr && !merged(t.pr)) return `Waits for #${t.pr} to merge`;
+  const w = t.waitsFor;
+  if (w?.pr && !merged(w.pr)) return `Waits for #${w.pr} to merge`;
+  if (w?.stagingRelease && !releaseMatches(state.staging?.release, w.stagingRelease)) {
+    const now = state.staging?.release ? `, staging runs ${state.staging.release.slice(0, 7)}` : state.staging?.error ? ` (${state.staging.error})` : '';
+    return `Waits for staging release ${w.stagingRelease.slice(0, 7)}${now}`;
+  }
+  return null;
+}
+function releaseMatches(have, want) {
+  const a = String(have || '').toLowerCase();
+  const b = String(want || '').toLowerCase();
+  return a.length >= 7 && b.length >= 7 && (a.startsWith(b) || b.startsWith(a));
 }
 
 // Tags from the line ("tags":["urgent"]), plus "after merge" for after:"merge" to dos.
@@ -656,22 +702,23 @@ function needCard(it) {
   const text = title || why.split('\n')[0] || '(no text)';
   const open = () => openCard(it.key);
   return h('div', {
-    class: `need-card ${it.done ? 'done' : ''} ${needsFlash?.key === it.key && Date.now() < needsFlash.until ? 'flash' : ''}`, role: 'button',
+    class: `need-card ${it.done ? 'done' : ''} ${it.wait ? 'waiting' : ''} ${needsFlash?.key === it.key && Date.now() < needsFlash.until ? 'flash' : ''}`, role: 'button',
     style: needsFlash?.key === it.key ? `animation-delay: -${Math.max(0, 2500 - (needsFlash.until - Date.now()))}ms` : null, tabindex: '0', title: 'Open the full card',
     onclick: (e) => { if (!e.target.closest('a')) open(); },
     onkeydown: (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } },
   },
     h('div', { class: 'need-meta' }, kindTag(it.kind), aboutChip({ ...it.u, pr: null }), it.u.pr ? prLink(it.u.pr) : null, tagChips(it.u)),
-    h('div', { class: 'need-title' }, richText(text)));
+    h('div', { class: 'need-title' }, richText(text)),
+    it.wait ? h('div', { class: 'need-wait' }, it.wait) : null);
 }
 
-// Needs you shows one card at a time. needsCur is the shown card's key; when it
-// goes (answered, Done), the card that moves into its place shows: the next one.
-let needsCur = null;
-let needsIdx = 0;
-let needsSeen = null; // keys already shown; null until the first render
+// Each row shows one card at a time. rowPos[row] = { cur, idx }: the shown
+// card's key, and its place, so when it goes (answered, Done) the card that
+// moves into its place shows.
+let rowPos = {};
+let needsSeen = null; // "row|key" already shown; null until the first render
 let needsFlash = null; // { key, until }
-function needsPage(delta) { needsIdx += delta; needsCur = null; renderNeeds(); }
+function needsPage(row, delta) { const p = rowPos[row] || (rowPos[row] = { cur: null, idx: 0 }); p.idx += delta; p.cur = null; renderNeeds(); }
 
 function needRow(it) {
   const { title, why } = splitTitle(it.u);
@@ -681,40 +728,49 @@ function needRow(it) {
 }
 
 function renderNeeds() {
-  const { open, todos, items, recent } = needsModel();
-  const total = items.length;
+  const { open, todos, rows, actionable, items, recent } = needsModel();
+  const total = actionable.length;
   $('#needs-panel').classList.toggle('has', total > 0);
   const count = $('#needs-count');
   count.hidden = total === 0;
   count.textContent = String(total);
-  count.title = `${open.length} to decide, ${todos.active.length} to do`;
+  count.title = rows.map((r) => `${r.label}: ${r.items.length}`).join(', ');
   const tc = $('#tab-count');
   tc.hidden = total === 0;
   tc.textContent = String(total);
   document.title = total ? `(${total}) Lanes` : 'Lanes';
 
-  // A card that was not there before: show it (the highest placed if several) and flash it.
+  // A card new to its row (new, or moved out of Waiting) shows in its row and
+  // glows. Moving into Waiting does not count.
   if (needsSeen) {
-    const fresh = items.find((c) => !needsSeen.has(c.key));
-    if (fresh) {
-      needsCur = fresh.key;
-      needsFlash = { key: fresh.key, until: Date.now() + 2500 };
-      setTimeout(() => { if (needsFlash && Date.now() >= needsFlash.until) { needsFlash = null; renderNeeds(); } }, 2600);
+    for (const it of items) {
+      if (needsSeen.has(`${it.row}|${it.key}`) || it.row === 'wait') continue;
+      (rowPos[it.row] || (rowPos[it.row] = { cur: null, idx: 0 })).cur = it.key;
+      if (!needsFlash || Date.now() >= needsFlash.until) {
+        needsFlash = { key: it.key, until: Date.now() + 2500 };
+        setTimeout(() => { if (needsFlash && Date.now() >= needsFlash.until) { needsFlash = null; renderNeeds(); } }, 2600);
+      }
     }
   }
-  needsSeen = new Set(items.map((c) => c.key));
-  const at = items.findIndex((c) => c.key === needsCur);
-  needsIdx = Math.max(0, Math.min(at >= 0 ? at : needsIdx, items.length - 1));
-  needsCur = items[needsIdx]?.key ?? null;
-  const pager = $('#needs-pager');
-  pager.hidden = items.length < 2;
-  if (items.length > 1) {
-    pager.replaceChildren(
-      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous', 'aria-label': 'Previous card', disabled: needsIdx === 0 ? true : null, onclick: () => needsPage(-1) }, icon('prev')),
-      h('span', { class: 'pager-pos', 'aria-live': 'polite' }, `${needsIdx + 1} of ${items.length}`),
-      h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next', 'aria-label': 'Next card', disabled: needsIdx === items.length - 1 ? true : null, onclick: () => needsPage(1) }, icon('next')));
+  needsSeen = new Set(items.map((it) => `${it.row}|${it.key}`));
+
+  const nodes = [];
+  if (!total) nodes.push(h('div', { class: 'nothing' }, rows.length ? 'Nothing needs you now.' : 'Nothing needs you.'));
+  for (const r of rows) {
+    const p = rowPos[r.key] || (rowPos[r.key] = { cur: null, idx: 0 });
+    const at = r.items.findIndex((c) => c.key === p.cur);
+    p.idx = Math.max(0, Math.min(at >= 0 ? at : p.idx, r.items.length - 1));
+    p.cur = r.items[p.idx].key;
+    const n = r.items.length;
+    nodes.push(h('section', { class: `need-group g-${r.key}`, 'aria-label': r.label },
+      h('div', { class: 'group-head' },
+        h('h3', null, r.label, h('span', { class: 'group-count' }, ` · ${n}`)),
+        n > 1 ? h('span', { class: 'needs-pager' },
+          h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous', 'aria-label': `Previous ${r.label} card`, disabled: p.idx === 0 ? true : null, onclick: () => needsPage(r.key, -1) }, icon('prev')),
+          h('span', { class: 'pager-pos', 'aria-live': 'polite' }, `${p.idx + 1} of ${n}`),
+          h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next', 'aria-label': `Next ${r.label} card`, disabled: p.idx === n - 1 ? true : null, onclick: () => needsPage(r.key, 1) }, icon('next'))) : null),
+      needCard(r.items[p.idx])));
   }
-  const nodes = items.length ? [needCard(items[needsIdx])] : [h('div', { class: 'nothing' }, 'Nothing needs you.')];
   if (recent.length) {
     const showing = expanded.has('recent');
     nodes.push(h('button', { type: 'button', class: 'more', style: 'color:var(--text-2)', onclick: () => { showing ? expanded.delete('recent') : expanded.add('recent'); renderNeeds(); } },
@@ -788,8 +844,7 @@ function todoModel() {
     const mine = state.answers.find((a) => a.replyTo === t.id && a.done);
     const coord = state.updates.find((u) => u.kind === 'done' && u.replyTo === t.id);
     if (mine || coord) { closed.push({ t, at: (mine || coord).t }); continue; }
-    const waitsForMerge = t.after === 'merge' && t.pr && state.prs?.[t.pr]?.state !== 'MERGED';
-    (waitsForMerge ? waiting : active).push(t);
+    (waitReason(t) ? waiting : active).push(t);
   }
   return { active, waiting, closed: closed.sort((a, b) => (b.at ?? 0) - (a.at ?? 0)) };
 }
@@ -807,7 +862,7 @@ function todoCard(t, mode) {
   }, 'Done') : null;
   return h('article', { class: `todo ${mode}`, id: `todo-${t.id}` },
     h('div', { class: 'msg-meta' }, kindTag('todo'), aboutChip({ ...t, pr: null }), t.pr ? prLink(t.pr) : null, tagChips(t),
-      mode === 'waiting' ? h('span', null, `after #${t.pr} merges`) : null,
+      mode === 'waiting' ? h('span', { class: 'need-wait' }, waitReason(t) || '') : null,
       h('span', { class: 'time', title: t.ts }, fmtTime(t.t))),
     cardBody(t, { clampId: `tx:${t.id}`, rerender: renderNeeds }),
     mode === 'active' ? h('div', { class: 'todo-foot' }, err, btn) : null,
@@ -1320,7 +1375,7 @@ function connect() {
 
 function switchProject(i) {
   projectIndex = i;
-  needsSeen = null; needsCur = null; needsIdx = 0; // a new project's cards are not "new"
+  needsSeen = null; rowPos = {}; // a new project's cards are not "new"
   store.set('project', i);
   const u = new URL(location.href);
   u.searchParams.set('p', String(i));
