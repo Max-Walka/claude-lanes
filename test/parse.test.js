@@ -95,7 +95,7 @@ test('update tags: trimmed, lower case, unique', () => {
 
 test('normaliseUpdate keeps sql queries exactly and drops empty ones', () => {
   const q = 'SELECT 1;\n\n  -- two spaces kept\n';
-  const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 'junk'] });
+  const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 7] });
   assert.deepEqual(u.sql, [{ title: '1 of 2: first', query: q, expect: 'One row.' }]);
   assert.deepEqual(U({ kind: 'todo', id: 't2' }).sql, []);
 });
@@ -135,4 +135,11 @@ test('cmds are kept exactly, next to sql', () => {
   assert.deepEqual(u.cmds, [{ title: '1 of 2: dry run', command: cmd, expect: 'Nothing.' }]);
   assert.equal(u.sql.length, 1);
   assert.deepEqual(U({ kind: 'todo', id: 'c2' }).cmds, []);
+});
+
+test('sql and cmds also take plain strings', () => {
+  const cmd = 'gh pr create --body-file C:\\Dev\\x.md';
+  const u = U({ kind: 'todo', id: 'p1', cmds: [cmd, '  ', { command: 'npm test' }, { text: 'dir' }], sql: ['SELECT 1;'] });
+  assert.deepEqual(u.cmds, [{ title: '', command: cmd, expect: '' }, { title: '', command: 'npm test', expect: '' }, { title: '', command: 'dir', expect: '' }]);
+  assert.deepEqual(u.sql, [{ title: '', query: 'SELECT 1;', expect: '' }]);
 });
