@@ -649,6 +649,10 @@ function needsModel() {
   const open = qs.filter((q) => q.status === 'open').sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
   const recentQs = qs.filter((q) => q.status !== 'open' && (q.status === 'sent' || (q.done?.t != null && Date.now() - q.done.t < 2 * 3600e3)));
   const todos = todoModel();
+  const readySet = new Set(readyOrdered().ordered.map((x) => x.n));
+  const notReady = (t) => !(t.pr && readySet.has(t.pr));
+  todos.active = todos.active.filter(notReady);
+  todos.waiting = todos.waiting.filter(notReady);
   const rank = (u) => (u.tags?.includes('urgent') ? 0 : u.tags?.includes('blocking') ? 1 : 2);
   const items = [
     ...open.map((q) => ({ key: `q:${q.id}`, u: q, kind: 'decide', card: () => questionCard(q) })),
@@ -882,9 +886,11 @@ function ownerOf(n) {
 
 // The plain name for a PR: the newest Coordinator merge-order label, else the GitHub title.
 function prLabel(n) {
-  const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator' && u.labels?.[n]);
+  const mo = state.updates.find((u) => u.kind === 'merge-order' && !u.repo && u.fromKey === 'coordinator' && u.labels?.[n]);
   return mo ? noEmDash(mo.labels[n]) : null;
 }
+
+const beforeCount = (n) => prTodos(n).filter((t) => t.after !== 'merge' && !t.waitsFor).length;
 
 // Open to dos for a PR, newest first. after:"merge" ones are what to check once it merges.
 function prTodos(n) {
@@ -919,7 +925,40 @@ function readyRow(n, ord) {
       h('span', { class: 'title', title }, title)),
     h('span', { class: 'r-bottom' },
       owner ? h('span', { class: 'owner' }, dot(owner), sessionOf(owner).name) : null,
-      ciMini(p)));
+      ciMini(p),
+      beforeCount(n) ? h('span', { class: 'r-todo-count', title: 'Open the row for what to do before merging' }, `${beforeCount(n)} to do`) : null));
+}
+
+// Other repos with their own merge order (a merge-order line with "repo"), each
+// a small group under the main list: its PRs in order, then those to close.
+function otherRepoGroups() {
+  const seen = new Set();
+  const groups = [];
+  for (const mo of state.updates) {
+    if (mo.kind !== 'merge-order' || !mo.repo || mo.fromKey !== 'coordinator' || seen.has(mo.repo)) continue;
+    seen.add(mo.repo);
+    const prs = state.repoPrs?.[mo.repo] || {};
+    const gone = (n) => prs[n]?.ok && (prs[n].state === 'MERGED' || prs[n].state === 'CLOSED');
+    const rows = [
+      ...mo.prs.map((n, i) => ({ n, ord: i + 1 })).filter((x) => !gone(x.n) && !mo.close.includes(x.n)),
+      ...mo.close.filter((n) => !gone(n)).map((n) => ({ n, close: true })),
+    ];
+    if (!rows.length) continue;
+    const short = mo.repo.split('/')[1];
+    groups.push(h('section', { class: 'repo-group', 'aria-label': `${short} pull requests` },
+      h('div', { class: 'repo-head', title: mo.repo }, short, h('span', { class: 'group-count' }, ` · ${rows.filter((r) => !r.close).length}`)),
+      ...rows.map((r) => otherRepoRow(mo, prs[r.n], r))));
+  }
+  return groups;
+}
+
+function otherRepoRow(mo, p, r) {
+  const url = p?.url || `https://github.com/${mo.repo}/pull/${r.n}`;
+  const title = noEmDash(mo.labels?.[r.n] || (p?.ok ? shortTitle(p.title) : ''));
+  return h('a', { class: `ready repo-pr ${r.close ? 'close' : ''}`, href: url, target: '_blank', rel: 'noreferrer', title: `Open ${mo.repo}#${r.n} on GitHub` },
+    h('span', { class: 'ord' }, r.close ? '' : String(r.ord)),
+    h('span', { class: 'r-top' }, h('span', { class: 'num' }, `#${r.n}`), h('span', { class: 'title' }, title)),
+    h('span', { class: 'r-bottom' }, r.close ? h('span', { class: 'close-note' }, 'Close, do not merge') : ciMini(p)));
 }
 
 // The modal for a ready PR: what it does, to dos before and after merging, the link.
@@ -943,13 +982,19 @@ function readyDetail(n) {
     url ? h('a', { href: url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null);
 }
 
+// The PRs in the main merge order that are not merged or closed yet, with their numbers.
+function readyOrdered() {
+  const mo = state.updates.find((u) => u.kind === 'merge-order' && !u.repo && u.fromKey === 'coordinator');
+  return { mo, ordered: (mo ? mo.prs.map((n, i) => ({ n, ord: i + 1 })) : []).filter((x) => !isGone(x.n)) };
+}
+
 function renderReady() {
-  const mo = state.updates.find((u) => u.kind === 'merge-order' && u.fromKey === 'coordinator');
   // Exactly the latest merge order, keeping its numbers (a merged PR drops out, the others keep theirs).
-  const ordered = (mo ? mo.prs.map((n, i) => ({ n, ord: i + 1 })) : []).filter((x) => !isGone(x.n));
+  const { mo, ordered } = readyOrdered();
   const nodes = [];
   ordered.forEach((x) => nodes.push(readyRow(x.n, x.ord)));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
+  nodes.push(...otherRepoGroups());
   // Only a real problem is shown: one line, not one per PR.
   if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
   const rc = $('#ready-count');
