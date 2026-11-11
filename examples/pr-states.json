@@ -1,12 +1,4 @@
 {
-  "repos": {
-    "acme/storefront-docs": {
-      "31": { "title": "docs: setup guide for the new checkout", "url": "https://github.com/acme/storefront-docs/pull/31", "state": "OPEN", "ci": "pass", "checks": [{ "name": "build", "bucket": "pass" }] },
-      "32": { "title": "docs: old layout", "url": "https://github.com/acme/storefront-docs/pull/32", "state": "OPEN", "ci": "none", "checks": [] },
-      "33": { "title": "docs: layout with search", "url": "https://github.com/acme/storefront-docs/pull/33", "state": "OPEN", "ci": "pending", "checks": [{ "name": "build", "bucket": "pending" }] },
-      "34": { "title": "docs: orders API reference", "url": "https://github.com/acme/storefront-docs/pull/34", "state": "MERGED", "ci": "pass", "checks": [] }
-    }
-  },
   "staging": { "release": "1a2b3c4" },
   "prs": {
     "209": { "title": "feat(search): results page on the new index", "url": "https://github.com/acme/storefront/pull/209", "state": "OPEN", "draft": false, "ci": "pending", "checks": [{ "name": "test", "bucket": "pending" }], "greptile": 4, "threads": 1 },

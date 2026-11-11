@@ -935,47 +935,13 @@ function readyRow(n, ord) {
       beforeCount(n) ? h('span', { class: 'r-todo-count', title: 'Open the row for what to do before merging' }, `${beforeCount(n)} to do`) : null));
 }
 
-// Other repos with their own merge order (a merge-order line with "repo"), each
-// a small group under the main list: its PRs in order, then those to close.
-function otherRepoGroups() {
-  const seen = new Set();
-  const groups = [];
-  let open = 0;
-  for (const mo of state.updates) {
-    if (mo.kind !== 'merge-order' || !mo.repo || mo.fromKey !== 'coordinator' || seen.has(mo.repo)) continue;
-    seen.add(mo.repo);
-    const prs = state.repoPrs?.[mo.repo] || {};
-    const gone = (n) => prs[n]?.ok && (prs[n].state === 'MERGED' || prs[n].state === 'CLOSED');
-    const rows = [
-      ...mo.prs.map((n, i) => ({ n, ord: i + 1 })).filter((x) => !gone(x.n) && !mo.close.includes(x.n)),
-      ...mo.close.filter((n) => !gone(n)).map((n) => ({ n, close: true })),
-    ];
-    if (!rows.length) continue;
-    const short = mo.repo.split('/')[1];
-    open += rows.filter((r) => !r.close).length;
-    groups.push(h('section', { class: 'repo-group', 'aria-label': `${short} pull requests` },
-      h('div', { class: 'repo-head', title: mo.repo }, short, h('span', { class: 'group-count' }, ` · ${rows.filter((r) => !r.close).length}`)),
-      ...rows.map((r) => otherRepoRow(mo, prs[r.n], r))));
-  }
-  return { nodes: groups, open };
-}
-
-// Ready to merge folds to its header ("Ready to merge · 11"); Needs you never
+// Ready to merge folds to its header ("Ready to merge · 3"); Needs you never
 // folds. Closed by default, and the choice is remembered on this browser.
 let readyOpen = store.get('readyOpen', false);
 function syncReadyOpen() {
   $('.ready-panel').classList.toggle('collapsed', !readyOpen);
   $('#ready-toggle').setAttribute('aria-expanded', String(readyOpen));
   $('#ready-toggle').title = readyOpen ? 'Fold Ready to merge' : 'Show Ready to merge';
-}
-
-function otherRepoRow(mo, p, r) {
-  const url = p?.url || `https://github.com/${mo.repo}/pull/${r.n}`;
-  const title = noEmDash(mo.labels?.[r.n] || (p?.ok ? shortTitle(p.title) : ''));
-  return h('a', { class: `ready repo-pr ${r.close ? 'close' : ''}`, href: url, target: '_blank', rel: 'noreferrer', title: `Open ${mo.repo}#${r.n} on GitHub` },
-    h('span', { class: 'ord' }, r.close ? '' : String(r.ord)),
-    h('span', { class: 'r-top' }, h('span', { class: 'num' }, `#${r.n}`), h('span', { class: 'title' }, title)),
-    h('span', { class: 'r-bottom' }, r.close ? h('span', { class: 'close-note' }, 'Close, do not merge') : ciMini(p)));
 }
 
 // The modal for a ready PR: what it does, to dos before and after merging, the link.
@@ -1012,12 +978,9 @@ function renderReady() {
   const nodes = [];
   ordered.forEach((x) => nodes.push(readyRow(x.n, x.ord)));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
-  const others = otherRepoGroups();
-  nodes.push(...others.nodes);
   // Only a real problem is shown: one line, not one per PR.
   if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
-  const total = ordered.length + others.open;
-  $('#ready-count').textContent = `· ${total}`;
+  $('#ready-count').textContent = `· ${ordered.length}`;
   syncReadyOpen();
   $('#ready-list').replaceChildren(...nodes);
   renderPrAge();
