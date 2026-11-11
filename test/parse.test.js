@@ -102,18 +102,18 @@ test('normaliseUpdate keeps sql queries exactly and drops empty ones', () => {
 
 test('waitsFor, check and staging releases', async () => {
   const { releaseMatches, waitingReleases } = await import('../lib/parse.js');
-  const t = U({ kind: 'todo', id: 'w1', check: 'Staging', waitsFor: { pr: '#12', stagingRelease: 'A50FE0B' } });
+  const t = U({ kind: 'todo', id: 'w1', check: 'Staging', waitsFor: { pr: '#12', stagingRelease: 'C0FFEE1' } });
   assert.equal(t.check, 'staging');
-  assert.deepEqual(t.waitsFor, { pr: 12, stagingRelease: 'a50fe0b' });
+  assert.deepEqual(t.waitsFor, { pr: 12, stagingRelease: 'c0ffee1' });
   assert.equal(U({ kind: 'todo', id: 'w2', waitsFor: { stagingRelease: 'nope' } }).waitsFor, null);
   assert.equal(U({ kind: 'todo', id: 'w3' }).waitsFor, null);
-  assert.ok(releaseMatches('a50fe0b', 'a50fe0b1234'));
-  assert.ok(releaseMatches('A50FE0B9', 'a50fe0b'));
-  assert.ok(!releaseMatches('a50fe0b', 'b50fe0b'));
-  assert.ok(!releaseMatches('', 'a50fe0b'));
+  assert.ok(releaseMatches('c0ffee1', 'c0ffee11234'));
+  assert.ok(releaseMatches('C0FFEE19', 'c0ffee1'));
+  assert.ok(!releaseMatches('c0ffee1', 'd0ffee1'));
+  assert.ok(!releaseMatches('', 'c0ffee1'));
   assert.ok(!releaseMatches('a50f', 'a50f'));
   const ups = [t, U({ kind: 'todo', id: 'w4', waitsFor: { stagingRelease: 'bbbbbbb' } }), U({ kind: 'done', replyTo: 'w4' })];
-  assert.deepEqual(waitingReleases(ups, []), ['a50fe0b']);
+  assert.deepEqual(waitingReleases(ups, []), ['c0ffee1']);
   assert.deepEqual(waitingReleases(ups, [{ replyTo: 'w1', done: true }]), []);
   assert.ok(trackedPrs([t], {}).includes(12));
 });
