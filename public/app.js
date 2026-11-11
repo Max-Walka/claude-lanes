@@ -118,9 +118,10 @@ const composers = new Map();
 
 // ---------- composer ----------
 class Composer {
-  constructor(key, { placeholder, replyTo }) {
+  constructor(key, { placeholder, replyTo, pr }) {
     this.key = key;
     this.replyTo = replyTo || null;
+    this.pr = pr || null;
     this.choice = null;
     this.choiceText = '';
     this.images = [];
@@ -313,6 +314,7 @@ class Composer {
     if (!text && !this.images.length) { this.setError('Type, dictate or paste something first'); return; }
     const body = { project: projectIndex, to: 'Coordinator', text, images: this.images.map((i) => i.dataUrl) };
     if (this.replyTo) body.replyTo = this.replyTo;
+    if (this.pr) body.pr = this.pr;
     if (this.choice != null && text.startsWith(this.choiceText)) body.choice = this.choice;
     this.sending = true;
     this.sendBtn.disabled = true;
@@ -864,11 +866,15 @@ function todoCard(t, mode) {
       } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Done'; }
     },
   }, 'Done') : null;
+  const c = mode === 'closed' ? null : composer(`t:${t.id}`, { placeholder: 'Reply or dictate', replyTo: t.id });
+  const last = state.answers.filter((a) => a.replyTo === t.id && !a.done).sort((a, b) => (b.t ?? 0) - (a.t ?? 0))[0];
   return h('article', { class: `todo ${mode}`, id: `todo-${t.id}` },
     h('div', { class: 'msg-meta' }, kindTag('todo'), aboutChip({ ...t, pr: null }), t.pr ? prLink(t.pr) : null, tagChips(t),
       mode === 'waiting' ? h('span', { class: 'need-wait' }, waitReason(t) || '') : null,
       h('span', { class: 'time', title: t.ts }, fmtTime(t.t))),
     cardBody(t, { clampId: `tx:${t.id}`, rerender: renderNeeds }),
+    last ? h('div', { class: 'last-reply' }, h('b', null, `You replied ${fmtTime(last.t)}: `), noEmDash(last.text)) : null,
+    c ? c.el : null,
     mode === 'active' ? h('div', { class: 'todo-foot' }, err, btn) : null,
     mode === 'closed' ? h('div', { class: 'qstatus settled' }, 'Done') : null);
 }
@@ -934,6 +940,7 @@ function readyRow(n, ord) {
 function otherRepoGroups() {
   const seen = new Set();
   const groups = [];
+  let open = 0;
   for (const mo of state.updates) {
     if (mo.kind !== 'merge-order' || !mo.repo || mo.fromKey !== 'coordinator' || seen.has(mo.repo)) continue;
     seen.add(mo.repo);
@@ -945,11 +952,21 @@ function otherRepoGroups() {
     ];
     if (!rows.length) continue;
     const short = mo.repo.split('/')[1];
+    open += rows.filter((r) => !r.close).length;
     groups.push(h('section', { class: 'repo-group', 'aria-label': `${short} pull requests` },
       h('div', { class: 'repo-head', title: mo.repo }, short, h('span', { class: 'group-count' }, ` · ${rows.filter((r) => !r.close).length}`)),
       ...rows.map((r) => otherRepoRow(mo, prs[r.n], r))));
   }
-  return groups;
+  return { nodes: groups, open };
+}
+
+// Ready to merge folds to its header ("Ready to merge · 11"); Needs you never
+// folds. Closed by default, and the choice is remembered on this browser.
+let readyOpen = store.get('readyOpen', false);
+function syncReadyOpen() {
+  $('.ready-panel').classList.toggle('collapsed', !readyOpen);
+  $('#ready-toggle').setAttribute('aria-expanded', String(readyOpen));
+  $('#ready-toggle').title = readyOpen ? 'Fold Ready to merge' : 'Show Ready to merge';
 }
 
 function otherRepoRow(mo, p, r) {
@@ -979,7 +996,8 @@ function readyDetail(n) {
     section('What it does', coordLine || laneLine ? h('div', { class: 'msg-text blk' }, block((coordLine || laneLine).text)) : h('div', { class: 'muted' }, 'No summary yet.')),
     before.length ? section('Before you merge', before.map((t) => todoBlock(t, 'rb'))) : null,
     afterMerge.length ? section('Check on staging after merging', afterMerge.map((t) => todoBlock(t, 'ra'))) : null,
-    url ? h('a', { href: url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null);
+    url ? h('a', { href: url, target: '_blank', rel: 'noreferrer', class: 'gh-link' }, `Open #${n} on GitHub`) : null,
+    composer(`pr:${n}`, { placeholder: `Reply about #${n} or dictate`, replyTo: `pr-${n}`, pr: n }).el);
 }
 
 // The PRs in the main merge order that are not merged or closed yet, with their numbers.
@@ -994,11 +1012,13 @@ function renderReady() {
   const nodes = [];
   ordered.forEach((x) => nodes.push(readyRow(x.n, x.ord)));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
-  nodes.push(...otherRepoGroups());
+  const others = otherRepoGroups();
+  nodes.push(...others.nodes);
   // Only a real problem is shown: one line, not one per PR.
   if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
-  const rc = $('#ready-count');
-  rc.textContent = ordered.length ? `(${ordered.length})` : '';
+  const total = ordered.length + others.open;
+  $('#ready-count').textContent = `· ${total}`;
+  syncReadyOpen();
   $('#ready-list').replaceChildren(...nodes);
   renderPrAge();
 }
@@ -1471,6 +1491,7 @@ $('#drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget
 $('#drawer').addEventListener('close', () => { drawerKey = null; });
 $('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; $('#card-modal').style.width = ''; });
 $('#card-modal-close').addEventListener('click', () => $('#card-modal').close());
+$('#ready-toggle').addEventListener('click', () => { readyOpen = !readyOpen; store.set('readyOpen', readyOpen); syncReadyOpen(); });
 // A click on the backdrop (outside the window) closes it; Escape does too (native dialog).
 // Only when the press also started there, so selecting query text and letting go outside does not close it.
 let cardModalDown = null;
