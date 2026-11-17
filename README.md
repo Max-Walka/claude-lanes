@@ -55,7 +55,51 @@ Everything fits on one screen; each column scrolls inside itself. Under about 10
 - **Right: Sessions.** One card per session: its state, its "Now" line and open PR count. A lane whose status file has a `State` line shows Working (with a rough "~N min left" and how long it has been on the task), Needs decision or Blocked (orange, with the question and when it will block, or the `Blocked on` line), Handing off or Stopped (red, "Needs restart: click its VS Code profile"), Done for today (grey, never stale), or any other `State` exactly as written (grey); click it to expand its task, start time, ETA, open PRs and what it finished today, with how long each took. Older status files without `State` show a dot (red blocked, blue waiting on you, green working). A card whose status file is over 60 minutes old (lanes rewrite it only when something changes) gets a grey "stale" chip and fades (a red restart card never fades). The full status file, PRs and messages open in a drawer. The status file format is in `templates/status-file.md`. Below them, a small **Activity log** link opens every lane update, newest first, in a drawer (for debugging).
 - **Menu:** `plan.md`, `rules.md`, `coordinator-rules.md`, read-only.
 
-Files are watched and changes reach the page live (server-sent events). PR state is cached and refreshed every 60 seconds, or with Refresh. The page never changes code and never messages a session itself: it reads the lanes folder (and, for the model names, the start and end of recent Claude Code transcripts), and writes only `answers.jsonl` plus new files in `attachments/`.
+Files are watched and changes reach the page live (server-sent events). PR state is cached and refreshed every 60 seconds, or with Refresh. The page never changes code and never messages a session itself: it reads the lanes folder (and, for the model names, the start and end of recent Claude Code transcripts), and writes only `answers.jsonl` plus new files in `attachments/` (and its own `logs/` folder next to `config.json`).
+
+## Live session status (Claude Code hooks)
+
+Status files change only when a session rewrites them, so a lane stuck on a permission prompt or an error can go unnoticed for a while. With the hooks below installed, every session reports as it happens, and each session card gets a live chip:
+
+| Chip | When |
+| --- | --- |
+| **Working** (green) | A prompt was sent or a tool ran |
+| **Waiting for you** (blue) | A permission prompt or a question waits in the terminal. After 2 minutes the chip turns red and the card gets a red outline |
+| **Idle** (grey) | The turn finished |
+| **Error** (red) | A tool failed, or the turn ended on an API error. The next event clears it |
+
+Each chip says "since hh:mm"; hover it for the reason. A session that reports live is not faded for a quiet status file.
+
+![Live chips on the session cards](screenshots/live-status.png)
+
+**Which card.** A session's working folder decides it. A folder named `lane-<id>` (such as `<repo>/.claude/worktrees/lane-b`, or `~/code/acme-lane-b`) is that lane; the project is the one whose `repoFolder` holds it, or the only project. The `repoFolder` itself (or a folder inside it) is the coordinator. Any other folder shows under the cards as "Other sessions", by folder name. Status is kept in memory (sessions quiet for 12 hours are dropped), and every event is appended to `logs/sessions.jsonl` next to `config.json`.
+
+**Install.** Add this to `~/.claude/settings.json` (user-wide, so every session reports), with the path to `scripts/lane-hook.mjs` in your clone. Merge it into an existing `"hooks"` block if you have one. New sessions pick it up; restart running ones.
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node \"C:/Dev/lanes-dashboard/scripts/lane-hook.mjs\"", "async": true, "timeout": 10 }] }]
+  }
+}
+```
+
+- `async: true` runs the hook in the background, so it never holds up a session. The script itself gives up after about 2 seconds, prints nothing and always exits 0, also when the dashboard is not running.
+- It sends only the session id, working folder, event name, notification type and message, tool name and error text, never the prompt or tool output. It posts to `http://127.0.0.1:4317/api/session-event`; set `LANES_HOOK_URL` to use another port.
+- `PostToolUse` runs after every tool call. It is there so a card goes back to Working once you approve a permission prompt; leave it out if you prefer, and the chip then stays on Waiting until the turn ends.
+
+**Check it works.** With the dashboard running, send a prompt in any lane: its card shows Working within a second, then Idle when the turn ends. `logs/sessions.jsonl` gets one line per event. By hand, from a lane's folder:
+
+```
+echo '{"session_id":"test","cwd":"'"$PWD"'","hook_event_name":"Stop"}' | node C:/Dev/lanes-dashboard/scripts/lane-hook.mjs
+```
 
 ## The two files
 
@@ -112,10 +156,11 @@ One JSON object per line. `ts` comes from the real clock, with an offset.
 | `server.js`, `lib/` | The Node server (no framework; one dependency, `marked`) |
 | `public/` | The page: plain HTML, CSS and JS |
 | `examples/` | The demo lanes folder and fake PR states used by `npm run demo` |
+| `scripts/lane-hook.mjs` | The Claude Code hook that reports live session status (see "Live session status") |
 
 ## Development
 
-- `npm test`: unit tests for the parsers.
+- `npm test`: unit tests for the parsers and the live status, plus the `/api/session-event` endpoint and the hook script against a real server on a random port.
 - `npm run demo`: the page on made-up data (port 4318), in a temp copy, so nothing real is touched.
 - `npm run screenshots -- [url] [outDir]`: light and dark, wide and narrow screenshots with the installed Edge or Chrome (via `playwright-core`, a dev dependency that downloads no browser). Defaults to the demo.
 
