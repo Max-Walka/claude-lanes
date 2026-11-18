@@ -139,7 +139,16 @@ button { font: inherit; color: inherit; }
 .nothing { font-size: 12px; color: var(--text-3); padding: 2px; }
 .ready-panel { flex: 1 1 auto; }
 .sessions-panel { flex: none; }
-.activity-panel { flex: 1 1 auto; }
+/* Needs you: one card at a time, paged. */
+.needs-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
+.needs-pager[hidden] { display: none; }
+.needs-pager .pager-pos { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.needs-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
+.needs-pager .pager-btn svg { width: 16px; height: 16px; }
+.needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
+/* The lane activity feed lives in a drawer, for debugging. */
+.activity-link { align-self: flex-start; border: 0; background: none; padding: 2px; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.activity-link:hover { color: var(--text); text-decoration: underline; }
 
 /* ---------- question cards (left) ---------- */
 .qcard { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; }
