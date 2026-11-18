@@ -500,7 +500,8 @@ function splitTitle(u) {
 function stepsList(steps) {
   if (!steps || !steps.length) return null;
   return h('ol', { class: 'steps' }, steps.map((step) => {
-    const [first, ...rest] = noEmDash(step).split(/\r?\n/);
+    const [lead, ...rest] = noEmDash(step).split(/\r?\n/);
+    const first = lead.replace(/^\s*\d{1,2}[.)]\s+/, ''); // already numbered: no "1. 1."
     const subs = rest.map((l) => l.match(/^\s*[-*]\s+(.*)$/)?.[1] ?? l.trim()).filter(Boolean);
     return h('li', null, richText(first), subs.length ? h('ul', null, subs.map((x) => h('li', null, richText(x)))) : null);
   }));
@@ -515,7 +516,75 @@ function cardBody(u, { clampId, rerender }) {
     why ? h('div', { class: `msg-text card-why ${long && !open ? 'clamp' : ''}` }, block(why)) : null,
     long ? h('button', { type: 'button', class: 'more', onclick: () => { open ? expanded.delete(clampId) : expanded.add(clampId); rerender(); } }, open ? 'Show less' : 'Show all') : null,
     stepsList(u.steps),
+    u.sql?.length ? sqlPager(u, rerender) : null,
   ];
+}
+
+// ---------- SQL queries on a card: one at a time, arrows to flip ----------
+const sqlIdx = new Map(); // card id -> index shown
+
+function sqlPager(u, rerender) {
+  const n = u.sql.length;
+  const key = u.id || `line:${u.line}`;
+  const i = Math.min(sqlIdx.get(key) ?? 0, n - 1);
+  const q = u.sql[i];
+  const go = (d) => { const j = i + d; if (j < 0 || j >= n) return; sqlIdx.set(key, j); rerender(); };
+  // Titles may already say "3 of 6: ..."; show our own count once.
+  const title = q.title.replace(/^\s*\d+\s*(of|\/)\s*\d+\s*[:.)-]?\s*/i, '');
+  const copy = h('button', { type: 'button', class: 'btn sql-copy' }, icon('copy'), 'Copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(q.query);
+      copy.replaceChildren(icon('check'), 'Copied');
+      setTimeout(() => copy.replaceChildren(icon('copy'), 'Copy'), 1500);
+    } catch { copy.replaceChildren(icon('copy'), 'Could not copy'); }
+  });
+  return h('section', { class: 'sql', 'aria-label': 'SQL queries' },
+    h('div', { class: 'sql-head' },
+      h('span', { class: 'sql-title' }, n > 1 ? `${i + 1} of ${n}${title ? ': ' : ''}` : '', title),
+      n > 1 ? h('span', { class: 'sql-pager' },
+        h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous query (Left arrow)', 'aria-label': 'Previous query', disabled: i === 0 ? true : null, onclick: () => go(-1) }, icon('prev')),
+        h('span', { class: 'pager-pos' }, `${i + 1} / ${n}`),
+        h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next query (Right arrow)', 'aria-label': 'Next query', disabled: i === n - 1 ? true : null, onclick: () => go(1) }, icon('next'))) : null),
+    h('div', { class: 'sql-box' }, h('pre', { class: 'sql-code' }, h('code', null, sqlHighlight(q.query))), copy),
+    q.expect ? h('div', { class: 'sql-expect' }, h('b', null, 'Expect: '), q.expect) : null);
+}
+
+// Left/Right flip queries while a card with SQL is open in the modal,
+// unless the focus is in a text box.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (!$('#card-modal').open || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  const btn = $(`#card-modal-body .sql-pager [aria-label="${e.key === 'ArrowRight' ? 'Next' : 'Previous'} query"]`);
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  btn.click();
+});
+
+const SQL_WORDS = new Set(('select from where and or not null is in as on join left right inner outer full cross using group by order having limit offset ' +
+  'insert into values update set delete returning create alter drop table column index unique primary key foreign references constraint default check ' +
+  'add if exists begin commit rollback transaction case when then else end distinct union all with comment grant revoke to view sequence ' +
+  'cascade restrict trigger function procedure language replace true false like ilike between asc desc boolean text integer int bigint ' +
+  'smallint serial bigserial varchar char numeric decimal real double precision timestamp timestamptz date time interval uuid jsonb json ' +
+  'bytea array do nothing conflict lateral filter over partition window rename type enum schema extension coalesce count sum min max now').split(' '));
+
+// A small tokenizer: comments, strings, quoted names, numbers, keywords. The
+// text of every token is kept as is, so the query reads exactly as written.
+function sqlHighlight(src) {
+  const out = [];
+  const re = /(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^']|'')*'?)|("(?:[^"]|"")*"?)|(\$\$[\s\S]*?\$\$)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([^A-Za-z0-9_'"$-]+|[\s\S])/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const [t, com, s, ident, dollar, num, word] = m;
+    if (com) out.push(h('span', { class: 'sq-com' }, t));
+    else if (s || dollar) out.push(h('span', { class: 'sq-str' }, t));
+    else if (ident) out.push(h('span', { class: 'sq-id' }, t));
+    else if (num) out.push(h('span', { class: 'sq-num' }, t));
+    else if (word && SQL_WORDS.has(word.toLowerCase())) out.push(h('span', { class: 'sq-kw' }, t));
+    else out.push(t);
+  }
+  return out;
 }
 
 function questionCard(q) {
@@ -669,6 +738,29 @@ function renderCardModal() {
   const it = live || recent.find((x) => x.key === modalKey);
   if (!it) { $('#card-modal').close(); return; }
   $('#card-modal-body').replaceChildren(it.card());
+  fitCardModal(it.u);
+}
+
+// A card with SQL widens the window to its widest query line (over all its
+// queries, so flipping does not jump), up to the screen width less a margin.
+// Only past that does the query scroll sideways.
+function fitCardModal(u) {
+  const d = $('#card-modal');
+  const code = $('#card-modal-body .sql-code');
+  if (!code || !u?.sql?.length) { d.style.width = ''; return; }
+  const cs = getComputedStyle(code);
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+  probe.style.font = cs.font;
+  probe.textContent = 'M'.repeat(40);
+  document.body.append(probe);
+  const ch = probe.getBoundingClientRect().width / 40;
+  probe.remove();
+  const tab = Number(cs.tabSize) || 4;
+  const widest = Math.max(...u.sql.flatMap((q) => q.query.split(/\r?\n/).map((l) => l.replace(/\t/g, ' '.repeat(tab)).length)));
+  const bs = getComputedStyle($('#card-modal-body'));
+  const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight);
+  d.style.width = `min(max(600px, ${Math.ceil(widest * ch + pad + 4)}px), calc(100vw - 48px))`;
 }
 // ---------- To do cards (inside Needs you) ----------
 // A todo stays until the person presses Done (an answer with done:true) or the
@@ -1259,8 +1351,13 @@ $('#pr-refresh').addEventListener('click', async () => {
 $('#drawer-close').addEventListener('click', () => $('#drawer').close());
 $('#drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#drawer').addEventListener('close', () => { drawerKey = null; });
-$('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; });
+$('#card-modal').addEventListener('close', () => { modalKey = null; modalLive = false; $('#card-modal').style.width = ''; });
 $('#card-modal-close').addEventListener('click', () => $('#card-modal').close());
+// A click on the backdrop (outside the window) closes it; Escape does too (native dialog).
+// Only when the press also started there, so selecting query text and letting go outside does not close it.
+let cardModalDown = null;
+$('#card-modal').addEventListener('pointerdown', (e) => { cardModalDown = e.target; });
+$('#card-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget && cardModalDown === e.currentTarget) e.currentTarget.close(); });
 $('#activity-btn').addEventListener('click', () => openDrawer('activity'));
 $('#doc-close').addEventListener('click', () => $('#doc').close());
 $('#doc').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });

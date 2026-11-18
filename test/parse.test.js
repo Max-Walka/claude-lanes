@@ -83,3 +83,10 @@ test('update tags: trimmed, lower case, unique', () => {
   assert.deepEqual(u.tags, ['urgent', 'blocking']);
   assert.deepEqual(normaliseUpdate({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'info', text: 'x' }, 0).tags, []);
 });
+
+test('normaliseUpdate keeps sql queries exactly and drops empty ones', () => {
+  const q = 'SELECT 1;\n\n  -- two spaces kept\n';
+  const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 'junk'] });
+  assert.deepEqual(u.sql, [{ title: '1 of 2: first', query: q, expect: 'One row.' }]);
+  assert.deepEqual(U({ kind: 'todo', id: 't2' }).sql, []);
+});
