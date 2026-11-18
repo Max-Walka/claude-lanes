@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import {
   sessionsFromFiles, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
-  sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey, waitingReleases,
+  sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey, waitingReleases, otherRepoPrs,
 } from './lib/parse.js';
 import { fetchPrStates } from './lib/gh.js';
 import { findModels } from './lib/models.js';
@@ -183,6 +183,7 @@ async function buildState(i) {
     prsFetchedAt: s.prsFetchedAt,
     prsError: s.prsError ?? null,
     staging: s.staging ?? null,
+    repoPrs: s.repoPrs ?? {},
     models: SHOW_MODELS ? models : {},
     prsFetching: !!s.prsFetching,
     now: Date.now(),
@@ -195,7 +196,7 @@ async function refreshState(i, { force = false } = {}) {
   if (!force && sig === s.signature && s.payload) return s.payload;
   s.signature = sig;
   s.payload = await buildState(i);
-  const prSet = s.payload.prList.join(',');
+  const prSet = s.payload.prList.join(',') + JSON.stringify(otherRepoPrs(s.payload.updates));
   if (prSet !== s.lastPrSet) {
     s.lastPrSet = prSet;
     if (s.clients.size) refreshPrs(i); // new PR numbers appeared
@@ -230,12 +231,33 @@ async function refreshPrs(i) {
       s.prsError = 'GitHub lookup failed';
     }
     s.prsFetchedAt = Date.now();
+    await refreshOtherRepos(i);
     await refreshStaging(i);
   })();
   s.prsFetching = run;
   if (s.payload) { s.payload.prsFetching = true; broadcast(i); }
   try { await run; } finally { s.prsFetching = null; }
   await refreshState(i, { force: true });
+}
+
+// PR states for other repos that have their own merge order (see otherRepoPrs).
+async function refreshOtherRepos(i) {
+  const p = projects[i];
+  const s = projectState[i];
+  const wanted = s.payload ? otherRepoPrs(s.payload.updates) : {};
+  const next = {};
+  for (const [repo, nums] of Object.entries(wanted)) {
+    try {
+      if (p.prStateFile) {
+        const demo = JSON.parse(await fsp.readFile(p.prStateFile, 'utf8'));
+        const got = demo.repos?.[repo] || {};
+        next[repo] = Object.fromEntries(nums.map((n) => [n, got[n] ? { ok: true, number: n, ...got[n] } : { ok: false, number: n }]));
+      } else {
+        next[repo] = (await fetchPrStates(nums, p.repoFolder, repo)).prs;
+      }
+    } catch { next[repo] = s.repoPrs?.[repo] || {}; }
+  }
+  s.repoPrs = next;
 }
 
 // The release staging runs, only while an open to do waits for one. Reads

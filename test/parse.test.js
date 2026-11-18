@@ -117,3 +117,16 @@ test('waitsFor, check and staging releases', async () => {
   assert.deepEqual(waitingReleases(ups, [{ replyTo: 'w1', done: true }]), []);
   assert.ok(trackedPrs([t], {}).includes(12));
 });
+
+test('merge orders for other repos stay apart', async () => {
+  const { otherRepoPrs } = await import('../lib/parse.js');
+  const ups = [
+    U({ ts: '2026-01-02T00:00:00Z', from: 'Coordinator', kind: 'merge-order', repo: 'acme/docs', prs: [1, 2, 4], close: [3] }),
+    U({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'merge-order', repo: 'acme/docs', prs: [9] }),
+    U({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'merge-order', prs: [212, 209] }),
+    U({ from: 'Coordinator', kind: 'merge-order', repo: 'not a repo', prs: [7] }),
+  ];
+  assert.deepEqual(otherRepoPrs(ups), { 'acme/docs': [1, 2, 4, 3] });
+  assert.deepEqual(trackedPrs(ups, {}).sort((a, b) => a - b), [7, 209, 212]);
+  assert.equal(ups[3].repo, null);
+});
