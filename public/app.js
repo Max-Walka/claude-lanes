@@ -945,11 +945,15 @@ function personMsg(m, { latest, terminal }) {
       h('span', { class: 'time', title: m.ts }, fmtTime(m.t))));
 }
 
+// A reply may carry a title and steps like a card, with or without text.
 function coordMsg(u) {
+  const copyText = [u.title, u.text, ...(u.steps || []).map((s, i) => `${i + 1}. ${s.replace(/^\s*\d{1,2}[.)]\s+/, '')}`)].filter(Boolean).join('\n\n');
   return h('div', { class: 'msg coord' },
+    u.title ? h('div', { class: 'card-title' }, richText(u.title)) : null,
     u.text ? h('div', { class: 'msg-text blk' }, block(u.text)) : null,
+    stepsList(u.steps),
     h('div', { class: 'msg-actions' },
-      u.text ? copyButton(u.text) : null,
+      copyText ? copyButton(copyText) : null,
       ['ready', 'blocked'].includes(u.kind) ? h('span', { class: `kind kind-${u.kind}` }, u.kind) : null,
       tagChips(u),
       u.pr ? prLink(u.pr) : null,

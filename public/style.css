@@ -290,6 +290,8 @@ button { font: inherit; color: inherit; }
 .msg-foot .time { font-variant-numeric: tabular-nums; }
 .msg.coord { padding: 10px 0 2px; gap: 2px; line-height: 1.6; }
 .msg.coord .msg-text { color: var(--text); }
+.msg.coord .card-title { margin-bottom: 2px; }
+.msg.coord .steps { font-size: inherit; margin: 4px 0 2px; gap: 4px; }
 .msg-actions { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); min-height: 28px; margin-left: -6px; }
 .msg-actions .time { font-variant-numeric: tabular-nums; }
 .msg.coord .msg-actions { opacity: .75; transition: opacity .15s; }
