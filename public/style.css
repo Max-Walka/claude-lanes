@@ -417,6 +417,11 @@ button { font: inherit; color: inherit; }
 .scard-head .state.s-done { color: var(--text-3); font-weight: 500; }
 .sdot.s-done { background: var(--text-3); }
 .scard-restart { font-size: 12px; font-weight: 600; color: var(--bad); }
+/* Restarting (the old session closed, the new one not heard from yet): amber. */
+.scard.s-restarting { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.scard-head .state.s-restarting { color: var(--warn); font-weight: 600; }
+.sdot.s-restarting { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.scard-restarting { font-size: 12px; font-weight: 600; color: var(--warn); }
 .stale-chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
 .scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
 .scard-head .state.s-working { color: var(--ok); }

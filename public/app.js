@@ -1180,9 +1180,14 @@ function sessionStatus(key) {
   const waiting = openQs.some((q) => q.aboutKey === key || (key === 'coordinator' && !q.aboutKey));
   // A board with a State field says it itself; older boards fall back to "Blocked on".
   const b = st.board;
-  // Handing off or Stopped: the session is done and needs a restart.
+  // Handing off or Stopped: the session is done and needs a restart. Live hook
+  // events move it on before the board changes: Restarting (amber) once the old
+  // session has closed, Starting up once a new one runs, until it rewrites the board.
   // Done for today: a quiet grey card, never stale, no restart.
   if (b?.state === 'done') return { cls: 's-done', label: 'Done for today', stale: false };
+  const phase = state.live?.restart?.[key];
+  if (phase === 'restarting') return { cls: 's-restarting', label: 'Restarting', stale };
+  if (phase === 'starting') return { cls: 's-working s-starting', label: 'Starting up', stale: false };
   if (b?.state === 'handoff') return { cls: 's-restart', label: 'Handing off', stale };
   if (b?.state === 'stopped') return { cls: 's-restart', label: 'Stopped', stale };
   if (b?.state === 'blocked') return { cls: 's-blocked', label: 'Blocked', stale };
@@ -1225,6 +1230,7 @@ function stateLine(key, ss) {
   }
   if (ss.cls === 's-blocked' && !isNone(st.fields?.['Blocked on'])) return h('div', { class: 'scard-blocked' }, noEmDash(st.fields['Blocked on'].split('\n')[0]));
   if (ss.cls === 's-restart') return h('div', { class: 'scard-restart' }, 'Needs restart: click its VS Code profile');
+  if (ss.cls === 's-restarting') return h('div', { class: 'scard-restarting' }, 'Restarting: open its VS Code profile');
   if (ss.cls === 's-working' && (b.started || b.eta)) {
     return h('div', { class: 'scard-meta' }, [
       b.started ? `${fmtDuration(Date.now() - b.started)} in` : null,
@@ -1335,7 +1341,7 @@ function renderSessions() {
       stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
     // A session that reports live through hooks is not faded for a quiet board.
-    const fade = ss.stale && !lv && !open && ss.cls !== 's-restart';
+    const fade = ss.stale && !lv && !open && ss.cls !== 's-restart' && ss.cls !== 's-restarting';
     return h('div', { class: `scard ${ss.cls} ${fade ? 'stale' : ''} ${open ? 'open' : ''} ${liveUrgent(lv) ? 'live-urgent-card' : ''}` }, main, open ? laneDetails(s.key) : null);
   }), ...(other ? [other] : []));
   if (focused) document.querySelector(`#session-cards [data-card="${focused}"]`)?.focus();
