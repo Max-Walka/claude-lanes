@@ -892,9 +892,11 @@ function todoModel() {
   return { active, waiting, closed: closed.sort((a, b) => (b.at ?? 0) - (a.at ?? 0)) };
 }
 
-function todoCard(t, mode) {
+// Done is on every open to do, wherever it shows: Needs you (active or
+// waiting) and the Ready to merge window. Pressing it writes a done answer.
+function doneFoot(t) {
   const err = h('span', { class: 'err' });
-  const btn = mode === 'active' ? h('button', {
+  const btn = h('button', {
     type: 'button', class: 'btn primary', onclick: async () => {
       btn.disabled = true; btn.textContent = 'Saving'; err.textContent = '';
       try {
@@ -902,7 +904,11 @@ function todoCard(t, mode) {
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save');
       } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Done'; }
     },
-  }, 'Done') : null;
+  }, 'Done');
+  return h('div', { class: 'todo-foot' }, err, btn);
+}
+
+function todoCard(t, mode) {
   const c = mode === 'closed' ? null : composer(`t:${t.id}`, { placeholder: 'Reply or dictate', replyTo: t.id });
   const last = state.answers.filter((a) => a.replyTo === t.id && !a.done).sort((a, b) => (b.t ?? 0) - (a.t ?? 0))[0];
   return h('article', { class: `todo ${mode}`, id: `todo-${t.id}` },
@@ -912,7 +918,7 @@ function todoCard(t, mode) {
     cardBody(t, { clampId: `tx:${t.id}`, rerender: renderNeeds }),
     last ? h('div', { class: 'last-reply' }, h('b', null, `You replied ${fmtTime(last.t)}: `), noEmDash(last.text)) : null,
     c ? c.el : null,
-    mode === 'active' ? h('div', { class: 'todo-foot' }, err, btn) : null,
+    mode === 'closed' ? null : doneFoot(t),
     mode === 'closed' ? h('div', { class: 'qstatus settled' }, 'Done') : null);
 }
 
@@ -943,7 +949,7 @@ function prTodos(n) {
 }
 
 function todoBlock(t, idPrefix) {
-  return h('div', { class: 'r-todo' }, tagsOf(t).length ? h('div', { class: 'need-meta' }, tagChips(t)) : null, cardBody(t, { clampId: `${idPrefix}:${t.id}`, rerender: renderCardModal }));
+  return h('div', { class: 'r-todo' }, tagsOf(t).length ? h('div', { class: 'need-meta' }, tagChips(t)) : null, cardBody(t, { clampId: `${idPrefix}:${t.id}`, rerender: renderCardModal }), doneFoot(t));
 }
 
 function readyTitle(n) {
