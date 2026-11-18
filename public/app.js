@@ -531,51 +531,87 @@ function cardBody(u, { clampId, rerender }) {
     why ? h('div', { class: `msg-text card-why ${long && !open ? 'clamp' : ''}` }, block(why)) : null,
     long ? h('button', { type: 'button', class: 'more', onclick: () => { open ? expanded.delete(clampId) : expanded.add(clampId); rerender(); } }, open ? 'Show less' : 'Show all') : null,
     stepsList(u.steps),
-    u.sql?.length ? sqlPager(u, rerender) : null,
+    u.sql?.length ? codePager(u, rerender, CODE.sql) : null,
+    u.cmds?.length ? codePager(u, rerender, CODE.cmd) : null,
   ];
 }
 
-// ---------- SQL queries on a card: one at a time, arrows to flip ----------
-const sqlIdx = new Map(); // card id -> index shown
+// ---------- SQL queries and terminal commands on a card ----------
+// One at a time, arrows to flip, Copy copies exactly the text shown.
+const CODE = {
+  sql: { kind: 'sql', list: (u) => u.sql, text: (q) => q.query, label: 'SQL', noun: 'query', nouns: 'SQL queries', highlight: (t) => sqlHighlight(t) },
+  cmd: { kind: 'cmd', list: (u) => u.cmds, text: (q) => q.command, label: 'PowerShell', noun: 'command', nouns: 'PowerShell commands', highlight: (t) => psHighlight(t) },
+};
+const sqlIdx = new Map(); // "kind:card id" -> index shown
+let codeActive = null; // the block the arrow keys flip: last one pointed at or focused
 
-function sqlPager(u, rerender) {
-  const n = u.sql.length;
-  const key = u.id || `line:${u.line}`;
+function codePager(u, rerender, c) {
+  const list = c.list(u);
+  const n = list.length;
+  const key = `${c.kind}:${u.id || `line:${u.line}`}`;
   const i = Math.min(sqlIdx.get(key) ?? 0, n - 1);
-  const q = u.sql[i];
-  const go = (d) => { const j = i + d; if (j < 0 || j >= n) return; sqlIdx.set(key, j); rerender(); };
+  const q = list[i];
+  const go = (d) => { const j = i + d; if (j < 0 || j >= n) return; sqlIdx.set(key, j); codeActive = c.kind; rerender(); };
   // Titles may already say "3 of 6: ..."; show our own count once.
   const title = q.title.replace(/^\s*\d+\s*(of|\/)\s*\d+\s*[:.)-]?\s*/i, '');
   const copy = h('button', { type: 'button', class: 'btn sql-copy' }, icon('copy'), 'Copy');
   copy.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(q.query);
+      await navigator.clipboard.writeText(c.text(q));
       copy.replaceChildren(icon('check'), 'Copied');
       setTimeout(() => copy.replaceChildren(icon('copy'), 'Copy'), 1500);
     } catch { copy.replaceChildren(icon('copy'), 'Could not copy'); }
   });
-  return h('section', { class: 'sql', 'aria-label': 'SQL queries' },
+  return h('section', {
+    class: `sql code-${c.kind}`, 'aria-label': c.nouns, dataset: { kind: c.kind },
+    onpointerenter: () => { codeActive = c.kind; }, onfocusin: () => { codeActive = c.kind; },
+  },
     h('div', { class: 'sql-head' },
+      h('span', { class: 'code-lang' }, c.label),
       h('span', { class: 'sql-title' }, n > 1 ? `${i + 1} of ${n}${title ? ': ' : ''}` : '', title),
       n > 1 ? h('span', { class: 'sql-pager' },
-        h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Previous query (Left arrow)', 'aria-label': 'Previous query', disabled: i === 0 ? true : null, onclick: () => go(-1) }, icon('prev')),
+        h('button', { type: 'button', class: 'icon-btn pager-btn', title: `Previous ${c.noun} (Left arrow)`, 'aria-label': `Previous ${c.noun}`, disabled: i === 0 ? true : null, onclick: () => go(-1) }, icon('prev')),
         h('span', { class: 'pager-pos' }, `${i + 1} / ${n}`),
-        h('button', { type: 'button', class: 'icon-btn pager-btn', title: 'Next query (Right arrow)', 'aria-label': 'Next query', disabled: i === n - 1 ? true : null, onclick: () => go(1) }, icon('next'))) : null),
-    h('div', { class: 'sql-box' }, h('pre', { class: 'sql-code' }, h('code', null, sqlHighlight(q.query))), copy),
+        h('button', { type: 'button', class: 'icon-btn pager-btn', title: `Next ${c.noun} (Right arrow)`, 'aria-label': `Next ${c.noun}`, disabled: i === n - 1 ? true : null, onclick: () => go(1) }, icon('next'))) : null),
+    h('div', { class: 'sql-box' }, h('pre', { class: 'sql-code' }, h('code', null, c.highlight(c.text(q)))), copy),
     q.expect ? h('div', { class: 'sql-expect' }, h('b', null, 'Expect: '), q.expect) : null);
 }
 
-// Left/Right flip queries while a card with SQL is open in the modal,
-// unless the focus is in a text box.
+// Left/Right flip the queries or commands while a card with them is open in
+// the modal (the block last pointed at; else the first), unless typing in a box.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   if (!$('#card-modal').open || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-  const btn = $(`#card-modal-body .sql-pager [aria-label="${e.key === 'ArrowRight' ? 'Next' : 'Previous'} query"]`);
+  const blocks = [...document.querySelectorAll('#card-modal-body .sql')].filter((s) => s.querySelector('.sql-pager'));
+  const block = blocks.find((s) => s.dataset.kind === codeActive) || blocks[0];
+  const btn = block?.querySelector(`.sql-pager [aria-label^="${e.key === 'ArrowRight' ? 'Next' : 'Previous'} "]`);
   if (!btn || btn.disabled) return;
   e.preventDefault();
   btn.click();
 });
+
+// PowerShell, lightly: comments, strings, $variables, -parameters, numbers,
+// and the first word of each command. Every character is kept as written.
+function psHighlight(src) {
+  const out = [];
+  const re = /((?<=\s|^)#[^\n]*)|('(?:[^']|'')*'?|"(?:[^"`]|`[\s\S])*"?)|(\$[\w:]+|\$\{[^}]*\})|((?<=\s|^)--?[A-Za-z][\w-]*)|(\b\d+(?:\.\d+)?\b)|([^\s|;#'"$]+)|(\s+|[\s\S])/g;
+  let m;
+  let start = true; // at the start of a command (line start, after | or ;)
+  while ((m = re.exec(src))) {
+    const [t, com, s, v, flag, num, word] = m;
+    if (com) out.push(h('span', { class: 'sq-com' }, t));
+    else if (s) out.push(h('span', { class: 'sq-str' }, t));
+    else if (v) out.push(h('span', { class: 'sq-id' }, t));
+    else if (flag) out.push(h('span', { class: 'sq-num' }, t));
+    else if (num) out.push(h('span', { class: 'sq-num' }, t));
+    else if (word && start) out.push(h('span', { class: 'sq-kw' }, t));
+    else out.push(t);
+    if (/[|;\n]/.test(t) && !com && !s) start = true;
+    else if (!/^\s+$/.test(t)) start = false;
+  }
+  return out;
+}
 
 const SQL_WORDS = new Set(('select from where and or not null is in as on join left right inner outer full cross using group by order having limit offset ' +
   'insert into values update set delete returning create alter drop table column index unique primary key foreign references constraint default check ' +
@@ -822,7 +858,8 @@ function renderCardModal() {
 function fitCardModal(u) {
   const d = $('#card-modal');
   const code = $('#card-modal-body .sql-code');
-  if (!code || !u?.sql?.length) { d.style.width = ''; return; }
+  const texts = [...(u?.sql || []).map((q) => q.query), ...(u?.cmds || []).map((q) => q.command)];
+  if (!code || !texts.length) { d.style.width = ''; return; }
   const cs = getComputedStyle(code);
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
@@ -832,7 +869,7 @@ function fitCardModal(u) {
   const ch = probe.getBoundingClientRect().width / 40;
   probe.remove();
   const tab = Number(cs.tabSize) || 4;
-  const widest = Math.max(...u.sql.flatMap((q) => q.query.split(/\r?\n/).map((l) => l.replace(/\t/g, ' '.repeat(tab)).length)));
+  const widest = Math.max(...texts.flatMap((t) => t.split(/\r?\n/).map((l) => l.replace(/\t/g, ' '.repeat(tab)).length)));
   const bs = getComputedStyle($('#card-modal-body'));
   const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight);
   d.style.width = `min(max(600px, ${Math.ceil(widest * ch + pad + 4)}px), calc(100vw - 48px))`;
@@ -935,47 +972,13 @@ function readyRow(n, ord) {
       beforeCount(n) ? h('span', { class: 'r-todo-count', title: 'Open the row for what to do before merging' }, `${beforeCount(n)} to do`) : null));
 }
 
-// Other repos with their own merge order (a merge-order line with "repo"), each
-// a small group under the main list: its PRs in order, then those to close.
-function otherRepoGroups() {
-  const seen = new Set();
-  const groups = [];
-  let open = 0;
-  for (const mo of state.updates) {
-    if (mo.kind !== 'merge-order' || !mo.repo || mo.fromKey !== 'coordinator' || seen.has(mo.repo)) continue;
-    seen.add(mo.repo);
-    const prs = state.repoPrs?.[mo.repo] || {};
-    const gone = (n) => prs[n]?.ok && (prs[n].state === 'MERGED' || prs[n].state === 'CLOSED');
-    const rows = [
-      ...mo.prs.map((n, i) => ({ n, ord: i + 1 })).filter((x) => !gone(x.n) && !mo.close.includes(x.n)),
-      ...mo.close.filter((n) => !gone(n)).map((n) => ({ n, close: true })),
-    ];
-    if (!rows.length) continue;
-    const short = mo.repo.split('/')[1];
-    open += rows.filter((r) => !r.close).length;
-    groups.push(h('section', { class: 'repo-group', 'aria-label': `${short} pull requests` },
-      h('div', { class: 'repo-head', title: mo.repo }, short, h('span', { class: 'group-count' }, ` · ${rows.filter((r) => !r.close).length}`)),
-      ...rows.map((r) => otherRepoRow(mo, prs[r.n], r))));
-  }
-  return { nodes: groups, open };
-}
-
-// Ready to merge folds to its header ("Ready to merge · 11"); Needs you never
+// Ready to merge folds to its header ("Ready to merge · 3"); Needs you never
 // folds. Closed by default, and the choice is remembered on this browser.
 let readyOpen = store.get('readyOpen', false);
 function syncReadyOpen() {
   $('.ready-panel').classList.toggle('collapsed', !readyOpen);
   $('#ready-toggle').setAttribute('aria-expanded', String(readyOpen));
   $('#ready-toggle').title = readyOpen ? 'Fold Ready to merge' : 'Show Ready to merge';
-}
-
-function otherRepoRow(mo, p, r) {
-  const url = p?.url || `https://github.com/${mo.repo}/pull/${r.n}`;
-  const title = noEmDash(mo.labels?.[r.n] || (p?.ok ? shortTitle(p.title) : ''));
-  return h('a', { class: `ready repo-pr ${r.close ? 'close' : ''}`, href: url, target: '_blank', rel: 'noreferrer', title: `Open ${mo.repo}#${r.n} on GitHub` },
-    h('span', { class: 'ord' }, r.close ? '' : String(r.ord)),
-    h('span', { class: 'r-top' }, h('span', { class: 'num' }, `#${r.n}`), h('span', { class: 'title' }, title)),
-    h('span', { class: 'r-bottom' }, r.close ? h('span', { class: 'close-note' }, 'Close, do not merge') : ciMini(p)));
 }
 
 // The modal for a ready PR: what it does, to dos before and after merging, the link.
@@ -1012,12 +1015,9 @@ function renderReady() {
   const nodes = [];
   ordered.forEach((x) => nodes.push(readyRow(x.n, x.ord)));
   if (!ordered.length) nodes.push(h('div', { class: 'nothing' }, mo ? 'Nothing to merge' : 'Nothing to merge yet. The Coordinator has not sent a merge order.'));
-  const others = otherRepoGroups();
-  nodes.push(...others.nodes);
   // Only a real problem is shown: one line, not one per PR.
   if (state.prsError) nodes.push(h('div', { class: 'open-total', title: 'CI and review scores show again once GitHub answers.' }, `${state.prsError}; CI not shown.`));
-  const total = ordered.length + others.open;
-  $('#ready-count').textContent = `· ${total}`;
+  $('#ready-count').textContent = `· ${ordered.length}`;
   syncReadyOpen();
   $('#ready-list').replaceChildren(...nodes);
   renderPrAge();

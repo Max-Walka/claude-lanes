@@ -137,8 +137,10 @@ button { font: inherit; color: inherit; }
 
 /* Needs you stands out only when something needs him. */
 /* Needs you keeps its own space: it never shrinks for Ready to merge, and scrolls past 45%. */
-/* Needs you never folds: it takes the column, Ready to merge folds below it. */
-.needs-panel { flex: 1 1 auto; min-height: 40%; }
+/* Needs you never folds and takes only the height its rows need (up to 70%,
+   then it scrolls). Ready to merge sits right under it and opens downward
+   into whatever space is left. */
+.needs-panel { flex: 0 0 auto; max-height: 70%; }
 
 /* Needs you rows: a small heading with a count, then that row's carousel. */
 #needs-list { gap: 10px; }
@@ -165,6 +167,8 @@ button { font: inherit; color: inherit; }
 .card-modal-body, .card-modal-body > article { min-width: 0; max-width: 100%; }
 .sql-head { display: flex; align-items: center; gap: 8px; }
 .sql-title { font-weight: 600; font-size: 13px; }
+.code-lang { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.code-cmd .code-lang { color: var(--accent); }
 .sql-pager { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); flex: none; }
 .sql-pager .pager-pos { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
 .sql-pager .pager-btn { width: 26px; height: 26px; border-radius: 50%; }
@@ -226,7 +230,7 @@ button { font: inherit; color: inherit; }
 .card-modal-body .qcard .clamp { -webkit-line-clamp: unset; display: block; }
 .needs-panel.has .panel-head h2 { font-size: 14px; }
 .nothing { font-size: 12px; color: var(--text-3); padding: 2px; }
-.ready-panel { flex: 0 1 auto; max-height: 50%; min-height: 0; }
+.ready-panel { flex: 0 1 auto; min-height: 0; }
 .ready-panel.collapsed { flex: none; }
 .ready-panel.collapsed #ready-list, .ready-panel.collapsed .pr-refresh { display: none; }
 .ready-panel.collapsed .panel-head { padding-bottom: 0; }
@@ -269,15 +273,6 @@ button { font: inherit; color: inherit; }
 .ready .r-bottom { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--text-2); }
 .ready .owner { display: inline-flex; align-items: center; gap: 5px; }
 .ready .r-todo-count { color: var(--warn); font-weight: 600; }
-/* Another repo's merge order: a small group under the main list. */
-.repo-group { display: grid; gap: 8px; margin-top: 6px; }
-.repo-head { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); padding: 0 2px; }
-a.ready.repo-pr { text-decoration: none; }
-a.ready.repo-pr .num { color: var(--accent); }
-.ready.repo-pr.close { background: transparent; border: 1px dashed var(--line); }
-.ready.repo-pr.close .title, .ready.repo-pr.close .num { color: var(--text-3); }
-.repo-head .group-count { color: var(--text-3); font-weight: 500; }
-.ready .close-note { color: var(--bad); font-weight: 600; }
 .ready-detail { display: grid; gap: 10px; font-size: 13px; color: var(--text-2); }
 .ready-detail > .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .ready-detail .msg-text { font-size: 13px; color: var(--text); }
@@ -537,7 +532,7 @@ a.ready.repo-pr .num { color: var(--accent); }
   .col.active { display: flex; }
   .col-chat.active { display: grid; }
   .col-left, .col-right { border: 0; }
-  .needs-panel { min-height: 50%; }
+  .needs-panel { max-height: 70%; }
 }
 @media (max-width: 600px) {
   .topbar { padding: 0 8px 0 16px; gap: 8px; }

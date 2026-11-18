@@ -95,7 +95,7 @@ test('update tags: trimmed, lower case, unique', () => {
 
 test('normaliseUpdate keeps sql queries exactly and drops empty ones', () => {
   const q = 'SELECT 1;\n\n  -- two spaces kept\n';
-  const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 'junk'] });
+  const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 7] });
   assert.deepEqual(u.sql, [{ title: '1 of 2: first', query: q, expect: 'One row.' }]);
   assert.deepEqual(U({ kind: 'todo', id: 't2' }).sql, []);
 });
@@ -118,15 +118,28 @@ test('waitsFor, check and staging releases', async () => {
   assert.ok(trackedPrs([t], {}).includes(12));
 });
 
-test('merge orders for other repos stay apart', async () => {
-  const { otherRepoPrs } = await import('../lib/parse.js');
+test('lines about another repo are ignored', () => {
   const ups = [
     U({ ts: '2026-01-02T00:00:00Z', from: 'Coordinator', kind: 'merge-order', repo: 'acme/docs', prs: [1, 2, 4], close: [3] }),
     U({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'merge-order', repo: 'acme/docs', prs: [9] }),
     U({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'merge-order', prs: [212, 209] }),
     U({ from: 'Coordinator', kind: 'merge-order', repo: 'not a repo', prs: [7] }),
   ];
-  assert.deepEqual(otherRepoPrs(ups), { 'acme/docs': [1, 2, 4, 3] });
-  assert.deepEqual(trackedPrs(ups, {}).sort((a, b) => a - b), [7, 209, 212]);
-  assert.equal(ups[3].repo, null);
+  assert.deepEqual(trackedPrs(ups, {}).sort((a, b) => a - b), [209, 212]);
+  assert.equal(ups[3].repo, 'not a repo');
+});
+
+test('cmds are kept exactly, next to sql', () => {
+  const cmd = 'Get-Content .\\logs\\x.log -Tail 20\n  | Select-String "ERROR"';
+  const u = U({ kind: 'todo', id: 'c1', sql: [{ query: 'SELECT 1;' }], cmds: [{ title: ' 1 of 2: dry run ', command: cmd, expect: 'Nothing.' }, { title: 'empty', command: ' ' }, 7] });
+  assert.deepEqual(u.cmds, [{ title: '1 of 2: dry run', command: cmd, expect: 'Nothing.' }]);
+  assert.equal(u.sql.length, 1);
+  assert.deepEqual(U({ kind: 'todo', id: 'c2' }).cmds, []);
+});
+
+test('sql and cmds also take plain strings', () => {
+  const cmd = 'gh pr create --body-file C:\\Dev\\x.md';
+  const u = U({ kind: 'todo', id: 'p1', cmds: [cmd, '  ', { command: 'npm test' }, { text: 'dir' }], sql: ['SELECT 1;'] });
+  assert.deepEqual(u.cmds, [{ title: '', command: cmd, expect: '' }, { title: '', command: 'npm test', expect: '' }, { title: '', command: 'dir', expect: '' }]);
+  assert.deepEqual(u.sql, [{ title: '', query: 'SELECT 1;', expect: '' }]);
 });
