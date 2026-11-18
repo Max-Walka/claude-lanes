@@ -6,7 +6,7 @@
 // Replaced from each state the server sends, so a new lane appears by itself.
 let SESSIONS = [{ key: 'coordinator', name: 'Coordinator' }];
 const PALETTE_SIZE = 8;
-const STALE_MS = 15 * 60 * 1000; // a board not updated for 15 min is "stale"
+const STALE_MS = 60 * 60 * 1000; // a board not updated for 60 min is "stale" (lanes rewrite boards only on change)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const NEAR_BOTTOM_PX = 120;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
