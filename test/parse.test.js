@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseLaneStatus, parseJsonl, normaliseUpdate, normaliseAnswer, needsYou, ciSummary,
-  greptileScore, sessionKey, trackedPrs, localIso, isNone,
+  greptileScore, sessionKey, trackedPrs, localIso, isNone, sessionsFromFiles,
 } from '../lib/parse.js';
 
 test('lane status: keys, multi-line Handoff', () => {
@@ -24,6 +24,15 @@ test('session names', () => {
   assert.equal(sessionKey('lane-b'), 'lane-b');
   assert.equal(sessionKey('Coordinator'), 'coordinator');
   assert.equal(sessionKey('User'), null);
+  assert.equal(sessionKey('Lane D'), 'lane-d');
+  assert.equal(sessionKey('lane e'), 'lane-e');
+  assert.equal(sessionKey('Lane Infra'), 'lane-infra');});
+
+test('sessions come from the lane-*.md files, in order', () => {
+  const got = sessionsFromFiles(['plan.md', 'lane-b.md', 'lane-d.md', 'Lane-A.md', 'lane-c.md', 'lane-10.md', 'lane-2.md', 'lanes.md', 'lane-.md', 'lane-a-b55-notes.md', 'lane-c-m2b-plan.md', 'lane-b-inventory.txt', 'updates.jsonl', 'lane-d.md']);
+  assert.deepEqual(got.map((s) => s.name), ['Coordinator', 'Lane 2', 'Lane A', 'Lane B', 'Lane C', 'Lane D', 'Lane 10']);
+  assert.deepEqual(got[5], { key: 'lane-d', name: 'Lane D', file: 'lane-d.md' });
+  assert.deepEqual(sessionsFromFiles([]).map((s) => s.key), ['coordinator']);
 });
 
 const U = (o) => normaliseUpdate({ _line: 0, ...o });
@@ -89,4 +98,22 @@ test('normaliseUpdate keeps sql queries exactly and drops empty ones', () => {
   const u = U({ kind: 'todo', id: 't1', sql: [{ title: ' 1 of 2: first ', query: q, expect: 'One row.' }, { title: 'empty', query: '  ' }, 'junk'] });
   assert.deepEqual(u.sql, [{ title: '1 of 2: first', query: q, expect: 'One row.' }]);
   assert.deepEqual(U({ kind: 'todo', id: 't2' }).sql, []);
+});
+
+test('waitsFor, check and staging releases', async () => {
+  const { releaseMatches, waitingReleases } = await import('../lib/parse.js');
+  const t = U({ kind: 'todo', id: 'w1', check: 'Staging', waitsFor: { pr: '#12', stagingRelease: 'C0FFEE1' } });
+  assert.equal(t.check, 'staging');
+  assert.deepEqual(t.waitsFor, { pr: 12, stagingRelease: 'c0ffee1' });
+  assert.equal(U({ kind: 'todo', id: 'w2', waitsFor: { stagingRelease: 'nope' } }).waitsFor, null);
+  assert.equal(U({ kind: 'todo', id: 'w3' }).waitsFor, null);
+  assert.ok(releaseMatches('c0ffee1', 'c0ffee11234'));
+  assert.ok(releaseMatches('C0FFEE19', 'c0ffee1'));
+  assert.ok(!releaseMatches('c0ffee1', 'd0ffee1'));
+  assert.ok(!releaseMatches('', 'c0ffee1'));
+  assert.ok(!releaseMatches('a50f', 'a50f'));
+  const ups = [t, U({ kind: 'todo', id: 'w4', waitsFor: { stagingRelease: 'bbbbbbb' } }), U({ kind: 'done', replyTo: 'w4' })];
+  assert.deepEqual(waitingReleases(ups, []), ['c0ffee1']);
+  assert.deepEqual(waitingReleases(ups, [{ replyTo: 'w1', done: true }]), []);
+  assert.ok(trackedPrs([t], {}).includes(12));
 });

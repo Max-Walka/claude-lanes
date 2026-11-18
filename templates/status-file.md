@@ -1,8 +1,8 @@
 # Status files
 
-One short file per session in the lanes folder: `coordinator.md`, `lane-a.md`, `lane-b.md`, `lane-c.md`. Each session overwrites its own file, never appends, and keeps it under about 20 lines. The dashboard shows it on the session's card and in its drawer.
+One short file per session in the lanes folder: `coordinator.md` and one `lane-<letter>.md` per lane (`lane-a.md`, `lane-b.md`, ...; add one for each new lane). Each session overwrites its own file, never appends, and keeps it under about 20 lines. The dashboard shows it on the session's card and in its drawer.
 
-## Lane status file (`lane-a.md`, `lane-b.md`, `lane-c.md`)
+## Lane status file (`lane-a.md`, `lane-b.md`, ...)
 
 Exactly these keys, one per line. `Done today` and `Handoff` may run over several lines (indent the extra lines).
 

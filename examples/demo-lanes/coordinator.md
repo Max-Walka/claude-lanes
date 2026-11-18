@@ -7,5 +7,6 @@ Waiting on Sam: reindex staging search now, or wait for tonight's job?
 Lane A: #215 (card errors) next, then the confirmation page.
 Lane B: blocked on the staging index until Sam decides.
 Lane C: orders endpoint #214, second review running.
+Lane D: new today, email receipts; waits on #212 for the totals.
 Risks: the card error copy needs a final wording check before #215.
 Handoff: post Sam's index answer to Lane B; list #209 once CI is green.

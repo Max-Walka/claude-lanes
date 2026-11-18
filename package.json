@@ -2,7 +2,7 @@
   "name": "claude-lanes",
   "version": "1.0.0",
   "private": true,
-  "description": "A coordinator and three lanes of Claude Code sessions working one project, with a local dashboard to watch and answer them.",
+  "description": "A coordinator plus any number of lanes of Claude Code sessions working one project, with a local dashboard to watch and answer them.",
   "type": "module",
   "scripts": {
     "start": "node server.js",

@@ -28,7 +28,7 @@ for (const f of files) {
 
 // Board times: {{ago N}} becomes the local time N minutes ago (ISO), {{hm N}} its HH:MM.
 const pad = (n) => String(n).padStart(2, '0');
-for (const f of ['lane-a.md', 'lane-b.md', 'lane-c.md']) {
+for (const f of fs.readdirSync(dir).filter((n) => /^lane-.+\.md$/.test(n))) {
   const file = path.join(dir, f);
   const text = fs.readFileSync(file, 'utf8').replace(/\{\{(ago|hm) (\d+)\}\}/g, (_, kind, n) => {
     const d = new Date(Date.now() - Number(n) * 60_000);
@@ -37,9 +37,9 @@ for (const f of ['lane-a.md', 'lane-b.md', 'lane-c.md']) {
   fs.writeFileSync(file, text);
 }
 
-// Status files: recent, except Lane C, which has been quiet for a while.
+// Status files: recent, except Lane C, which has been quiet for a while. Lane D is new today.
 const ago = (min) => new Date(Date.now() - min * 60_000);
-for (const [f, min] of [['coordinator.md', 4], ['lane-a.md', 6], ['lane-b.md', 25], ['lane-c.md', 150]]) {
+for (const [f, min] of [['coordinator.md', 4], ['lane-a.md', 6], ['lane-b.md', 25], ['lane-c.md', 150], ['lane-d.md', 3]]) {
   fs.utimesSync(path.join(dir, f), ago(min), ago(min));
 }
 

@@ -1,12 +1,12 @@
 # Claude Lanes: Parallel Agents
 
-Four Claude Code sessions work on one project together: a coordinator you talk to, and three lanes that do the work. To set it up on any project, clone this repo, open Claude Code in your project, paste the message under "Set it up" with your details filled in, and Claude builds the rest.
+Several Claude Code sessions work on one project together: one coordinator you talk to, and as many lanes as the work splits into. Three is a good start; add more later. To set it up on any project, clone this repo, open Claude Code in your project, paste the message under "Set it up" with your details filled in, and Claude builds the rest.
 
 ## How it works
 
 **The coordinator** is the one session you talk to. It does not write code. It keeps the plan, gives each lane its next task, spots two lanes about to change the same file, and tells you what is ready for you to check.
 
-**The three lanes** (A, B and C) each work on their own area, in their own copy of the code, so they never get in each other's way. Everything a session needs to remember lives in a shared folder of short text files, so any session can be closed and started again without losing its place.
+**The lanes** (Lane A, Lane B and so on) each work on their own area, in their own copy of the code, so they never get in each other's way. Everything a session needs to remember lives in a shared folder of short text files, so any session can be closed and started again without losing its place.
 
 ```
                           you
@@ -18,30 +18,30 @@ Four Claude Code sessions work on one project together: a coordinator you talk t
                     +-------------+
                      /     |     \        SendMessage when it can't wait
               +--------+ +--------+ +--------+
-              | Lane A | | Lane B | | Lane C |  each in its own git worktree
+              | Lane A | | Lane B | | Lane C | ...  each in its own git worktree
               +--------+ +--------+ +--------+
                      \     |     /
           ~/.claude/lanes/<project>/   (the shared folder, outside git)
           plan.md   rules.md   coordinator-rules.md
-          coordinator.md  lane-a.md  lane-b.md  lane-c.md   (status files)
+          coordinator.md  lane-a.md  lane-b.md  ...   (status files, one per session)
           updates.jsonl  (sessions append)   answers.jsonl  (the page appends)
 ```
 
 | Piece | What it is | Where it lives |
 | --- | --- | --- |
 | Coordinator | The Claude Code session you talk to | Your main project folder |
-| Lanes A, B, C | Claude Code sessions that do the work | Each in its own copy of the code (a git worktree) |
+| Lanes A, B, ... | Claude Code sessions that do the work, as many as you need | Each in its own copy of the code (a git worktree) |
 | `plan.md` | What each lane works on, in order, plus decisions and merge order | The shared folder: `~/.claude/lanes/<project>/` |
 | `rules.md` | How every lane works: the default rules plus your project's own | The shared folder |
 | `coordinator-rules.md` | The coordinator's job | The shared folder |
-| Status files | One short file per session: what it is doing, its open work, anything blocking it | The shared folder (`coordinator.md`, `lane-a.md`, `lane-b.md`, `lane-c.md`) |
-| Start commands | `/coordinator <project>` and `/lane <a, b or c> <project>` | `~/.claude/commands/`, so they work in any project |
+| Status files | One short file per session: what it is doing, its open work, anything blocking it | The shared folder (`coordinator.md`, then `lane-a.md`, `lane-b.md` and so on) |
+| Start commands | `/coordinator <project>` and `/lane <letter> <project>` | `~/.claude/commands/`, so they work in any project |
 
 Sessions also message each other directly when something can't wait, such as "I'm about to change the menu file". Each session's name is its address, so names must be different across projects running at the same time.
 
 ## The dashboard
 
-A web page on your own computer shows all four sessions on one screen, and you can reply to the coordinator from it instead of the terminal. Open http://127.0.0.1:4317 in Edge or Chrome. Everything fits without scrolling.
+A web page on your own computer shows every session on one screen, and you can reply to the coordinator from it instead of the terminal. Open http://127.0.0.1:4317 in Edge or Chrome. Everything fits without scrolling.
 
 | Column | What it shows |
 | --- | --- |
@@ -67,7 +67,7 @@ You do this once per project. It takes about ten minutes, most of it Claude work
 2. Open Claude Code in your project's folder.
 3. Copy the message below, fill in the blanks, and send it.
 4. Answer any questions Claude asks. It only asks about what you left out.
-5. When Claude says it's done, open four terminals and start each session ("Starting and restarting" below).
+5. When Claude says it's done, open one terminal per session and start each one ("Starting and restarting" below).
 
 ```
 Set up parallel agents for this project. Follow the "For Claude" section of
@@ -81,7 +81,7 @@ Use the dashboard? (yes/no): ___
 Lane A works on: ___
 Lane B works on: ___
 Lane C works on: ___
-(List each lane's tasks in order, most important first.)
+(One line per lane, as many lanes as you like. List each lane's tasks in order, most important first.)
 
 Project rules (anything the agents must or must not do): ___
 Files more than one lane might change: ___
@@ -93,7 +93,7 @@ Not sure how to split the work? Write the whole list once and ask Claude to sugg
 
 ## Your day
 
-1. **Start:** open the four sessions and the dashboard. Ask the coordinator "where are we?"
+1. **Start:** open the sessions and the dashboard. Ask the coordinator "where are we?"
 2. **Check in a couple of times a day:** check the dashboard's Needs you and Ready to merge columns. For each pull request, look at the screenshots, try it, and approve or send it back.
 3. **In between:** leave them to it. Answer the questions the coordinator passes on.
 4. **Close:** tell the coordinator "wrap up". Every session writes a note on where it got to, so tomorrow starts cleanly.
@@ -110,6 +110,9 @@ Without profiles, start Claude Code in a terminal and type:
 | Lane A | `/lane a <project>` |
 | Lane B | `/lane b <project>` |
 | Lane C | `/lane c <project>` |
+| Any later lane | `/lane d <project>`, `/lane e <project>`, ... |
+
+**Adding a lane later:** add its section to `plan.md` and an empty `lane-<letter>.md` to the shared folder, then start it with `/lane <letter> <project>` (and a terminal profile if you use them). The dashboard shows it as soon as the file exists.
 
 Starting and restarting are the same thing. The session reads its rules, the plan and its status file, checks its open work and carries on.
 
@@ -171,10 +174,10 @@ You are setting up the system this page describes, for the project in the person
    - `plan.md` (from `templates/plan.md`): the goal and deadline; one section per lane with its tasks in order (top item = now); the shared files list; the merge order; an empty decisions log.
    - `rules.md` (from `templates/rules.md`): "Every start" and "First start" steps, the status file format, the rules from "Rules every lane follows" above, the project's own testing and review steps, and the person's project rules, which win where they disagree.
    - `coordinator-rules.md` (from `templates/coordinator-rules.md`): "Every start", the job, and the dashboard section. The coordinator never writes feature code and stays in the main project folder on the main branch.
-   - `coordinator.md`, `lane-a.md`, `lane-b.md`, `lane-c.md`: starting status files (format in `templates/status-file.md`).
+   - `coordinator.md` and one `lane-<letter>.md` per lane (`lane-a.md`, `lane-b.md`, ...): starting status files (format in `templates/status-file.md`).
 5. **Make the start commands** by copying `templates/commands/coordinator.md` and `templates/commands/lane.md` into `~/.claude/commands/`, if they aren't there already. If files with those names exist and point at one project's folder, rewrite them to take the project name, and keep that project as the answer when no name is given, so a setup already running keeps working.
 6. **Offer terminal profiles** (VS Code, in the user's settings under `terminal.integrated.profiles.windows`, or `.osx` / `.linux`). One per session, each starting Claude in the project folder with a name and a starting message, for example: `claude -n "<Project> Lane A" -w <project>-lane-a "/lane a <project>"`. `-n` names the session, and `-w` gives the lane its own copy of the code. The coordinator gets no `-w`. Names must be unique across every project running at once, because a name is how sessions message each other.
-7. **Finish by telling the person** what you made, in a few lines, and exactly how to start the four sessions. Don't start any lane work yourself.
+7. **Finish by telling the person** what you made, in a few lines, and exactly how to start each session. Don't start any lane work yourself.
 
 Hard rules for every session, whatever the project: no merging, releasing or changing live data unless the person's rules allow it, and never force-delete a copy of the code (`git worktree remove --force`).
 

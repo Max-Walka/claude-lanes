@@ -5,7 +5,7 @@
 You are the coordinator for `<project>`. You run in the main checkout (`<path>`), which stays on `main`. You do not write feature code.
 
 ## Every start
-1. Read `plan.md`, `rules.md` (the lanes' rules), `coordinator.md` (your own handoff) and all three lane status files.
+1. Read `plan.md`, `rules.md` (the lanes' rules), `coordinator.md` (your own handoff) and every lane status file (`lane-*.md`; a new lane can appear at any time).
 2. Check every open PR (`gh pr list --state open`): CI, automated review and open threads, fresh.
 3. Read the last ~30 lines of `updates.jsonl`, and any `answers.jsonl` lines past the count in `coordinator-answers.seen` (answer those first).
 4. Start the Monitor on `answers.jsonl`, using `~/.claude/lanes/<project>/coordinator-answers.seen` as its state file (the count of lines already handled), so you never act on an old answer twice. Re-arm it whenever it expires (every 30 minutes).
