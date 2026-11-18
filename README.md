@@ -1,6 +1,6 @@
 # Claude Lanes: Parallel Agents
 
-`claude-lanes` runs a project with four Claude Code sessions at once: a **coordinator** you talk to, and three **lanes** (A, B, C) that each work their own area in their own git worktree. They share a small folder of plain text files (the plan, the rules, one status file per session), so any session can be restarted without losing its place.
+`claude-lanes` runs a project with several Claude Code sessions at once: one **coordinator** you talk to, and as many **lanes** as the work splits into (Lane A, Lane B, ...), each working its own area in its own git worktree. Add a lane at any time; the page shows it as soon as its status file exists. They share a small folder of plain text files (the plan, the rules, one status file per session), so any session can be restarted without losing its place.
 
 This repo ships the workflow (a setup guide, templates and start commands) and a **local dashboard**: one page that shows what needs you, what's ready to merge, your chat with the coordinator, and what every session is doing.
 
@@ -10,7 +10,7 @@ This repo ships the workflow (a setup guide, templates and start commands) and a
 
 1. Clone this repo: `git clone https://github.com/Max-Walka/claude-lanes.git`
 2. Read [docs/SETUP.md](docs/SETUP.md). It explains the setup and holds the message you paste into Claude Code in your project. Claude then writes the lanes folder (`~/.claude/lanes/<project>/`) from [templates/](templates/) and installs the `/coordinator` and `/lane` commands.
-3. Start the four sessions: `/coordinator <project>`, `/lane a <project>`, `/lane b <project>`, `/lane c <project>`.
+3. Start the sessions: `/coordinator <project>`, then one `/lane <letter> <project>` per lane (`/lane a <project>`, `/lane b <project>`, ...).
 
 ## Quick start: the dashboard
 

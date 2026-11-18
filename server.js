@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import {
-  SESSIONS, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
+  sessionsFromFiles, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
   sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey,
 } from './lib/parse.js';
 import { fetchPrStates } from './lib/gh.js';
@@ -107,8 +107,20 @@ async function readText(file) {
   }
 }
 
+// The sessions of a project, from the lane-*.md files in its lanes folder.
+// Kept per project so answers and model lookups know the current lanes.
+const sessionLists = new Map();
+async function sessionsOf(p) {
+  let names = [];
+  try { names = await fsp.readdir(p.lanesFolder); } catch { /* missing folder: coordinator only */ }
+  const list = sessionsFromFiles(names);
+  sessionLists.set(p.index, list);
+  return list;
+}
+const allSessionNames = () => [...new Set([...sessionLists.values()].flat().map((s) => s.name))];
+
 async function folderSignature(p) {
-  const names = [...SESSIONS.map((s) => s.file), ...Object.values(DOCS), 'updates.jsonl', 'answers.jsonl'];
+  const names = [...(await sessionsOf(p)).map((s) => s.file), ...Object.values(DOCS), 'updates.jsonl', 'answers.jsonl'];
   const parts = await Promise.all(names.map(async (n) => {
     try { const st = await fsp.stat(path.join(p.lanesFolder, n)); return `${n}:${st.mtimeMs}:${st.size}`; } catch { return `${n}:-`; }
   }));
@@ -121,8 +133,9 @@ async function buildState(i) {
   let folderOk = true;
   try { folderOk = (await fsp.stat(p.lanesFolder)).isDirectory(); } catch { folderOk = false; }
 
+  const list = await sessionsOf(p);
   const sessions = {};
-  for (const sess of SESSIONS) {
+  for (const sess of list) {
     const f = await readText(path.join(p.lanesFolder, sess.file));
     const entry = { key: sess.key, name: sess.name, file: sess.file, exists: f.exists, mtime: f.mtime, raw: noEmDash(f.text) };
     entry.updatedLine = f.exists ? readField(f.text, 'Updated') : null;
@@ -156,6 +169,7 @@ async function buildState(i) {
     person: PERSON,
     folderOk,
     sessions,
+    sessionList: list.map(({ key, name, file }) => ({ key, name, file })),
     updates,
     answers,
     needs: needsYou(updates, answers, s.prs),
@@ -239,7 +253,8 @@ function startWatching(i) {
 
 let models = {};
 async function refreshModels() {
-  const next = await findModels(TRANSCRIPTS, SESSIONS.map((x) => x.name));
+  for (const p of projects) await sessionsOf(p); // the current lanes, also before the first state
+  const next = await findModels(TRANSCRIPTS, allSessionNames());
   const sig = (m) => JSON.stringify(Object.entries(m).map(([k, v]) => [k, v.model]).sort());
   const changed = sig(next) !== sig(models);
   models = next;
@@ -261,14 +276,14 @@ function queued(fn) {
 }
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const SESSION_NAMES = SESSIONS.map((s) => s.name);
 
 function validateAnswer(body) {
   if (!body || typeof body !== 'object') return 'Bad request';
   const i = Number(body.project);
   if (!Number.isInteger(i) || !projects[i]) return 'Unknown project';
-  const to = SESSIONS.find((s) => s.key === sessionKey(body.to));
-  if (!to) return `"to" must be one of ${SESSION_NAMES.join(', ')}`;
+  const list = sessionLists.get(i) || [];
+  const to = list.find((s) => s.key === sessionKey(body.to));
+  if (!to) return `"to" must be one of ${list.map((s) => s.name).join(', ')}`;
   if (typeof body.text !== 'string' || body.text.length > 20000) return 'Text must be a string under 20,000 characters';
   const images = Array.isArray(body.images) ? body.images : [];
   if (images.length > MAX_IMAGES) return `At most ${MAX_IMAGES} images per reply`;

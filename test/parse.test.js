@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseLaneStatus, parseJsonl, normaliseUpdate, normaliseAnswer, needsYou, ciSummary,
-  greptileScore, sessionKey, trackedPrs, localIso, isNone,
+  greptileScore, sessionKey, trackedPrs, localIso, isNone, sessionsFromFiles,
 } from '../lib/parse.js';
 
 test('lane status: keys, multi-line Handoff', () => {
@@ -24,6 +24,15 @@ test('session names', () => {
   assert.equal(sessionKey('lane-b'), 'lane-b');
   assert.equal(sessionKey('Coordinator'), 'coordinator');
   assert.equal(sessionKey('User'), null);
+  assert.equal(sessionKey('Lane D'), 'lane-d');
+  assert.equal(sessionKey('lane e'), 'lane-e');
+  assert.equal(sessionKey('Lane Infra'), 'lane-infra');});
+
+test('sessions come from the lane-*.md files, in order', () => {
+  const got = sessionsFromFiles(['plan.md', 'lane-b.md', 'lane-d.md', 'Lane-A.md', 'lane-c.md', 'lane-10.md', 'lane-2.md', 'lanes.md', 'lane-.md', 'lane-a-b55-notes.md', 'lane-c-m2b-plan.md', 'lane-b-inventory.txt', 'updates.jsonl', 'lane-d.md']);
+  assert.deepEqual(got.map((s) => s.name), ['Coordinator', 'Lane 2', 'Lane A', 'Lane B', 'Lane C', 'Lane D', 'Lane 10']);
+  assert.deepEqual(got[5], { key: 'lane-d', name: 'Lane D', file: 'lane-d.md' });
+  assert.deepEqual(sessionsFromFiles([]).map((s) => s.key), ['coordinator']);
 });
 
 const U = (o) => normaliseUpdate({ _line: 0, ...o });
