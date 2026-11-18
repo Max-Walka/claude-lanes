@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { sessionForCwd, statusFromEvent, normaliseHookEvent, createLiveStore } from '../lib/live.js';
+import { sessionForCwd, statusFromEvent, normaliseHookEvent, createLiveStore, restartPhase } from '../lib/live.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lanes-live-'));
@@ -109,7 +109,7 @@ test('the newest session wins a lane; unknown folders show as other', () => {
   assert.equal(v.other[0].folder, 'scratch');
   // Sessions quiet for over 12 hours are forgotten.
   t += 13 * 60 * 60 * 1000;
-  assert.deepEqual(store.forProject(0), { byKey: {}, other: [] });
+  assert.deepEqual(store.forProject(0), { byKey: {}, other: [], restart: {} });
 });
 
 test('events are appended to the log file', () => {
@@ -132,6 +132,7 @@ before(async () => {
   fs.mkdirSync(repo, { recursive: true });
   fs.writeFileSync(path.join(lanes, 'lane-a.md'), 'Updated: now\nNow: testing\n');
   fs.writeFileSync(path.join(lanes, 'coordinator.md'), 'Now: watching\n');
+  fs.writeFileSync(path.join(lanes, 'lane-d.md'), 'Updated: now\nState: Handing off\nNow: handing off\n');
   const config = path.join(tmp, 'config.json');
   fs.writeFileSync(config, JSON.stringify({ port: PORT, showModels: false, projects: [{ name: 'acme', lanesFolder: lanes, repoFolder: repo, prStateFile: path.join(ROOT, 'examples', 'pr-states.json') }] }));
   server = spawn(process.execPath, [path.join(ROOT, 'server.js')], { env: { ...process.env, LANES_CONFIG: config, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -180,6 +181,29 @@ test('POST /api/session-event updates the state and the event stream', async () 
   assert.deepEqual(await c.json(), { ok: true, lane: 'coordinator', status: 'working' });
 });
 
+test('a handed-off lane turns Restarting, then Starting up, on the event stream', async () => {
+  const cwd = path.join(repo, '.claude', 'worktrees', 'lane-d');
+  const ctrl = new AbortController();
+  const reader = (await fetch(`${BASE}/events?p=0`, { signal: ctrl.signal })).body.getReader();
+  let seen = '';
+  const waitFor = async (re) => {
+    const end = Date.now() + 5000;
+    while (!re.test(seen)) {
+      if (Date.now() > end) throw new Error(`no ${re} in the stream`);
+      const { value } = await reader.read();
+      seen += new TextDecoder().decode(value);
+    }
+  };
+  await waitFor(/event: state/);
+  seen = '';
+  await postEvent({ session_id: 'd-old', cwd, hook_event_name: 'SessionEnd', reason: 'other' });
+  await waitFor(/"restart":\{"lane-d":"restarting"\}/);
+  seen = '';
+  await postEvent({ session_id: 'd-new', cwd, hook_event_name: 'SessionStart', source: 'startup' });
+  await waitFor(/"restart":\{"lane-d":"starting"\}/);
+  ctrl.abort();
+});
+
 test('POST /api/session-event refuses bad input and other hosts', async () => {
   assert.equal((await postEvent('not json')).status, 400);
   assert.equal((await postEvent({ hook_event_name: 'Stop' })).status, 400);
@@ -222,4 +246,49 @@ test('an event that fired before the latest one changes nothing', () => {
   // A hook clock ahead of ours, or far behind, is replaced by ours.
   const r = store.handle({ session_id: 's2', cwd, hook_event_name: 'Stop', ts: new Date(t + 60_000).toISOString() });
   assert.equal(r.record.since, t);
+});
+
+test('a handed-off lane shows Restarting when its session ends, Starting up when a new one runs', () => {
+  let t = Date.parse('2026-11-18T10:00:00Z');
+  const store = createLiveStore({ projects: PROJECTS, now: () => t });
+  const cwd = path.join(repo, '.claude', 'worktrees', 'lane-c');
+  const post = (id, o) => store.handle({ session_id: id, cwd, ...o });
+  post('old', { hook_event_name: 'UserPromptSubmit' });
+  t += 60_000;
+  const boards = { 'lane-c': { state: 'handoff', mtime: t } }; // the old session writes "Handing off"
+  t += 1000;
+  post('old', { hook_event_name: 'Stop' });
+  assert.deepEqual(store.forProject(0, boards).restart, {}, 'old session still open: Needs restart');
+  t += 5000;
+  assert.equal(post('old', { hook_event_name: 'SessionEnd', reason: 'other' }).changed, true);
+  assert.deepEqual(store.forProject(0, boards).restart, { 'lane-c': 'restarting' });
+  // Stopped reads the same; other board states and other projects are untouched.
+  assert.deepEqual(store.forProject(0, { 'lane-c': { state: 'stopped', mtime: boards['lane-c'].mtime } }).restart, { 'lane-c': 'restarting' });
+  assert.deepEqual(store.forProject(0, { 'lane-c': { state: 'working', mtime: boards['lane-c'].mtime } }).restart, {});
+  assert.deepEqual(store.forProject(1, boards).restart, {});
+  // Ended sessions are kept past the old 10 minute cut, so the card does not fall back to red.
+  t += 30 * 60 * 1000;
+  assert.deepEqual(store.forProject(0, boards).restart, { 'lane-c': 'restarting' });
+  t += 1000;
+  assert.equal(post('new', { hook_event_name: 'SessionStart', source: 'startup' }).changed, true);
+  const v = store.forProject(0, boards);
+  assert.deepEqual(v.restart, { 'lane-c': 'starting' });
+  assert.equal(v.byKey['lane-c'].sessionId, 'new');
+  // A late event from the old session does not make it the newest again.
+  post('old', { hook_event_name: 'Notification', notification_type: 'idle_prompt' });
+  assert.deepEqual(store.forProject(0, boards).restart, { 'lane-c': 'starting' });
+  // The new session rewrites the board: normal rules apply, even if it still says Handing off.
+  t += 1000;
+  assert.deepEqual(store.forProject(0, { 'lane-c': { state: 'working', mtime: t } }).restart, {});
+  assert.deepEqual(store.forProject(0, { 'lane-c': { state: 'handoff', mtime: t } }).restart, {});
+});
+
+test('restartPhase reads the board against the newest session', () => {
+  const board = { state: 'handoff', mtime: 1000 };
+  assert.equal(restartPhase(board, null), null);
+  assert.equal(restartPhase(null, { status: 'ended', first: 1 }), null);
+  assert.equal(restartPhase(board, { status: 'ended', first: 500 }), 'restarting');
+  assert.equal(restartPhase(board, { status: 'idle', first: 500 }), null);
+  assert.equal(restartPhase(board, { status: 'working', first: 1500 }), 'starting');
+  assert.equal(restartPhase({ state: 'handoff', mtime: null }, { status: 'idle', first: 1500 }), null);
 });

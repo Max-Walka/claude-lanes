@@ -212,7 +212,9 @@ async function refreshState(i, { force = false } = {}) {
 // The cached payload plus the live session status, which changes without any file changing.
 function withLive(i) {
   const s = projectState[i];
-  s.payload.live = live.forProject(i);
+  const boards = {};
+  for (const [key, e] of Object.entries(s.payload.sessions || {})) if (e.board) boards[key] = { state: e.board.state, mtime: e.mtime };
+  s.payload.live = live.forProject(i, boards);
   s.payload.now = Date.now();
   return s.payload;
 }
