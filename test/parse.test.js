@@ -128,3 +128,11 @@ test('lines about another repo are ignored', () => {
   assert.deepEqual(trackedPrs(ups, {}).sort((a, b) => a - b), [209, 212]);
   assert.equal(ups[3].repo, 'not a repo');
 });
+
+test('cmds are kept exactly, next to sql', () => {
+  const cmd = 'Get-Content .\\logs\\x.log -Tail 20\n  | Select-String "ERROR"';
+  const u = U({ kind: 'todo', id: 'c1', sql: [{ query: 'SELECT 1;' }], cmds: [{ title: ' 1 of 2: dry run ', command: cmd, expect: 'Nothing.' }, { title: 'empty', command: ' ' }, 7] });
+  assert.deepEqual(u.cmds, [{ title: '1 of 2: dry run', command: cmd, expect: 'Nothing.' }]);
+  assert.equal(u.sql.length, 1);
+  assert.deepEqual(U({ kind: 'todo', id: 'c2' }).cmds, []);
+});
