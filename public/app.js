@@ -122,10 +122,11 @@ class Composer {
       ? h('button', { type: 'button', class: 'icon-btn', title: 'Dictate', 'aria-label': 'Dictate', 'aria-pressed': 'false', onclick: () => this.toggleMic() }, icon('mic'))
       : null;
     this.file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: () => { this.addFiles([...this.file.files]); this.file.value = ''; } });
-    this.attach = h('button', { type: 'button', class: 'icon-btn', title: 'Add image', 'aria-label': 'Add image', onclick: () => this.file.click() }, icon('image'));
-    this.sendBtn = h('button', { type: 'button', class: 'btn primary send-btn', onclick: () => this.send() }, 'Send');
+    this.attach = h('button', { type: 'button', class: 'icon-btn', title: 'Add an image (or paste or drop one)', 'aria-label': 'Add image', onclick: () => this.file.click() }, icon('plus'));
+    this.sendBtn = h('button', { type: 'button', class: 'send-btn', title: 'Send (Enter)', 'aria-label': 'Send', onclick: () => this.send() }, icon('send'));
+    this.model = h('span', { class: 'composer-model', hidden: true });
     this.el = h('div', { class: 'composer' }, this.thumbs, this.textarea,
-      h('div', { class: 'composer-bar' }, this.hint, this.file, this.attach, this.mic, this.sendBtn));
+      h('div', { class: 'composer-bar' }, this.file, this.attach, this.mic, this.hint, this.model, this.sendBtn));
 
     this.textarea.addEventListener('input', () => { this.autosize(); if (this.listening && !this.applyingSpeech) this.stopMic(); });
     this.textarea.addEventListener('keydown', (e) => {
@@ -147,6 +148,13 @@ class Composer {
   autosize() {
     this.textarea.style.height = 'auto';
     this.textarea.style.height = `${Math.min(this.textarea.scrollHeight, 260)}px`;
+  }
+
+  // The model the Coordinator runs, read-only (shown in the main box only).
+  setModel(m) {
+    this.model.hidden = !m;
+    this.model.textContent = m ? m.label : '';
+    this.model.title = m ? `The Coordinator runs ${m.model}. Change it with /model in its terminal.` : '';
   }
 
   setError(msg) {
@@ -198,6 +206,7 @@ class Composer {
       h('img', { src: img.dataUrl, alt: `Image ${i + 1}` }),
       h('button', { type: 'button', 'aria-label': `Remove image ${i + 1}`, title: 'Remove', onclick: () => { this.images.splice(i, 1); this.renderThumbs(); this.textarea.focus(); } }, '×'))));
     this.thumbs.hidden = this.images.length === 0;
+    this.el.classList.toggle('has-images', this.images.length > 0);
   }
 
   toggleMic() { this.listening ? this.stopMic() : this.startMic(); }
@@ -294,7 +303,7 @@ class Composer {
     if (this.choice != null && text.startsWith(this.choiceText)) body.choice = this.choice;
     this.sending = true;
     this.sendBtn.disabled = true;
-    this.sendBtn.textContent = 'Sending';
+    this.sendBtn.setAttribute('aria-busy', 'true');
     this.setError('');
     try {
       const res = await fetch('/api/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -312,7 +321,7 @@ class Composer {
     } finally {
       this.sending = false;
       this.sendBtn.disabled = false;
-      this.sendBtn.textContent = 'Send';
+      this.sendBtn.removeAttribute('aria-busy');
     }
   }
 }
@@ -401,6 +410,10 @@ async function toPngDataUrl(file) {
 const ICONS = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-9 9"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
 };
 function icon(name) {
   const s = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`, 'image/svg+xml');
@@ -736,21 +749,37 @@ function personMsg(m, { latest, terminal }) {
   }
   const domId = terminal ? `m-${m.line}` : `a-${m.id}`;
   return h('div', { class: `msg you ${latest ? 'latest' : ''}`, id: domId },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'who' }, 'You'), terminal ? h('span', { class: 'tag' }, 'terminal') : null,
-      !terminal && m.to && m.to !== 'Coordinator' ? h('span', null, `to ${m.to}`) : null,
-      h('span', { class: 'time', title: m.ts }, fmtTime(m.t))),
     re,
-    m.text ? h('div', { class: 'msg-text' }, noEmDash(m.text)) : null,
-    terminal ? null : attachmentThumbs(m));
+    h('div', { class: 'bubble' },
+      m.text ? h('div', { class: 'msg-text' }, noEmDash(m.text)) : null,
+      terminal ? null : attachmentThumbs(m)),
+    h('div', { class: 'msg-foot' },
+      terminal ? h('span', { class: 'tag', title: 'Typed in the Coordinator\'s terminal' }, 'terminal') : null,
+      !terminal && m.to && m.to !== 'Coordinator' ? h('span', null, `to ${m.to}`) : null,
+      h('span', { class: 'time', title: m.ts }, fmtTime(m.t))));
 }
 
 function coordMsg(u) {
-  return h('div', { class: 'msg' },
-    h('div', { class: 'msg-meta' }, h('span', { class: 'who' }, dot('coordinator'), 'Coordinator'),
+  return h('div', { class: 'msg coord' },
+    u.text ? h('div', { class: 'msg-text blk' }, block(u.text)) : null,
+    h('div', { class: 'msg-actions' },
+      u.text ? copyButton(u.text) : null,
       ['ready', 'blocked'].includes(u.kind) ? h('span', { class: `kind kind-${u.kind}` }, u.kind) : null,
       u.pr ? prLink(u.pr) : null,
-      h('span', { class: 'time', title: u.ts }, fmtTime(u.t))),
-    u.text ? h('div', { class: 'msg-text blk' }, block(u.text)) : null);
+      h('span', { class: 'time', title: `Coordinator, ${u.ts}` }, fmtTime(u.t))));
+}
+
+function copyButton(text) {
+  const btn = h('button', { type: 'button', class: 'icon-btn mini-btn', title: 'Copy', 'aria-label': 'Copy message' }, icon('copy'));
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(noEmDash(text));
+      btn.replaceChildren(icon('check'));
+      btn.title = 'Copied';
+      setTimeout(() => { btn.replaceChildren(icon('copy')); btn.title = 'Copy'; }, 1500);
+    } catch { btn.title = 'Could not copy'; }
+  });
+  return btn;
 }
 
 function prLink(n) {
@@ -765,6 +794,7 @@ function renderChat() {
   const prevTop = sc.scrollTop;
   const entries = chatEntries();
   const latest = latestMine();
+  composers.get('main')?.setModel(state.models?.Coordinator || null);
   const nodes = [];
   let lastDay = '';
   for (const e of entries) {
@@ -932,7 +962,7 @@ function renderSessions() {
       'aria-expanded': expandable ? String(open) : null,
       'aria-label': `${s.name}: ${ss.label}. ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
     },
-      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), h('span', { class: `state ${ss.cls}` }, ss.label)),
+      h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), state.models?.[s.name] ? h('span', { class: 'smodel', title: `Runs ${state.models[s.name].model}. Change it with /model in its terminal.` }, state.models[s.name].label) : null, h('span', { class: `state ${ss.cls}` }, ss.label)),
       h('div', { class: 'scard-now' }, noEmDash(nowLine(s.key))),
       stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
@@ -1089,7 +1119,7 @@ function switchProject(i) {
 }
 
 function mountMain() {
-  const c = composer('main', { placeholder: 'Message the Coordinator, dictate, or paste a screenshot' });
+  const c = composer('main', { placeholder: 'Reply to the Coordinator' });
   $('#chat-input').replaceChildren(c.el);
 }
 

@@ -12,6 +12,7 @@ import {
   sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey,
 } from './lib/parse.js';
 import { fetchPrStates, fetchOpenMine } from './lib/gh.js';
+import { findModels } from './lib/models.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -53,6 +54,10 @@ if (!projects.length) {
   process.exit(1);
 }
 const PORT = Number(process.env.PORT || config.port || 4317);
+// Each session's model, read from Claude Code's transcripts. "showModels": false turns it off;
+// "transcriptsFolder" points elsewhere than ~/.claude/projects.
+const SHOW_MODELS = config.showModels !== false;
+const TRANSCRIPTS = path.resolve(configDir, expandHome(String(config.transcriptsFolder || '~/.claude/projects')));
 
 function expandHome(p) {
   return p.replace(/^~(?=$|[\\/])/, process.env.USERPROFILE || process.env.HOME || '~');
@@ -160,6 +165,7 @@ async function buildState(i) {
     prs: s.prs,
     prsFetchedAt: s.prsFetchedAt,
     openMine: s.openMine ?? null,
+    models: SHOW_MODELS ? models : {},
     prsFetching: !!s.prsFetching,
     now: Date.now(),
   };
@@ -227,6 +233,19 @@ function startWatching(i) {
   // Polling backs up fs.watch, which can miss events on network drives and editors that swap files.
   setInterval(() => { attach(); refreshState(i).catch(logErr); }, POLL_MS).unref();
   setInterval(() => { if (s.clients.size) refreshPrs(i).catch(logErr); }, PR_REFRESH_MS).unref();
+}
+
+let models = {};
+async function refreshModels() {
+  const next = await findModels(TRANSCRIPTS, SESSIONS.map((x) => x.name));
+  const sig = (m) => JSON.stringify(Object.entries(m).map(([k, v]) => [k, v.model]).sort());
+  const changed = sig(next) !== sig(models);
+  models = next;
+  if (changed) for (const p of projects) await refreshState(p.index, { force: true });
+}
+if (SHOW_MODELS) {
+  refreshModels().catch(logErr);
+  setInterval(() => refreshModels().catch(logErr), 60_000).unref();
 }
 
 function logErr(e) { console.error(e && e.stack ? e.stack : e); }
