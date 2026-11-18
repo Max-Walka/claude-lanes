@@ -49,6 +49,7 @@ test('State values', () => {
   assert.equal(boardState('Stopped (handed off 10:10, needs a restart: /lane b)'), 'stopped');
   assert.equal(boardState('Handing off'), 'handoff');
   assert.equal(boardState('handed off 17:14'), 'handoff');
+  assert.equal(boardState('Done for today (back 9:00)'), 'done');
   assert.equal(boardState('Thinking'), 'other');
   assert.equal(boardState(''), null);
 });

@@ -8,7 +8,7 @@ Exactly these keys, one per line. `Done today` and `Handoff` may run over severa
 
 ```
 Updated: <date and time>
-State: <Working | Needs decision | Blocked | Handing off | Stopped>
+State: <Working | Needs decision | Blocked | Handing off | Stopped | Done for today>
 Now: <current task, one line>
 Started: <ISO time the current task started>
 ETA: <rough time left, e.g. ~40 min; base it on Done today lines for similar work>
@@ -25,7 +25,7 @@ Handoff: <the half-finished step, and anything the next session must know>
 
 The dashboard reads these keys:
 
-- `State` sets the card's look: Working (green dot), Needs decision and Blocked (orange card), Handing off and Stopped (red card, "Needs restart: click its VS Code profile"). Any other value shows as written, in grey. A board not updated for 15 minutes shows "stale". Working = has a task. Needs decision = working, but a later task waits on an answer. Blocked = nothing left to do without the answer. Stopped = handed off, needs a restart.
+- `State` sets the card's look: Working (green dot), Needs decision and Blocked (orange card), Handing off and Stopped (red card, "Needs restart: click its VS Code profile"). Done for today: a grey card, never marked stale. Any other value shows as written, in grey. A board not updated for 15 minutes shows "stale". Working = has a task. Needs decision = working, but a later task waits on an answer. Blocked = nothing left to do without the answer. Stopped = handed off, needs a restart.
 - `ETA` shows on a Working card as "Working, ~40 min left" (the first estimate in the line; labelled rough), with the time since `Started`.
 - `Decision` shows on a Needs decision card: the question's title (looked up by id) and "Blocked in ~N h".
 - Click a card with these fields to expand it: Now, Started, ETA, open PRs, then Done today with how long each took.

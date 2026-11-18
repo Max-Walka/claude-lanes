@@ -145,6 +145,13 @@ button { font: inherit; color: inherit; }
 .needs-pager .pager-btn:disabled { opacity: .35; cursor: default; }
 .need-card { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; cursor: pointer; }
 .need-card:hover { border-color: var(--line); }
+/* A card that just arrived: a short accent glow. */
+.need-card.flash { animation: need-flash 2.4s ease-out; }
+@keyframes need-flash {
+  0%, 30% { border-color: var(--heading); box-shadow: 0 0 0 3px color-mix(in srgb, var(--heading) 30%, transparent); }
+  100% { border-color: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .need-card.flash { animation: none; border-color: var(--heading); } }
 .need-card .need-title { font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 .need-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
 .tag-chip { font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
@@ -333,6 +340,9 @@ button { font: inherit; color: inherit; }
 .scard-head .state.s-other { color: var(--text-2); font-weight: 500; }
 .sdot.s-restart { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
 .sdot.s-other { background: var(--text-3); }
+.scard.s-done { background: var(--surface-2); }
+.scard-head .state.s-done { color: var(--text-3); font-weight: 500; }
+.sdot.s-done { background: var(--text-3); }
 .scard-restart { font-size: 12px; font-weight: 600; color: var(--bad); }
 .stale-chip { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
 .scard-head .state.s-decision { color: var(--warn); font-weight: 600; }
