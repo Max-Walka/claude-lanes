@@ -47,7 +47,9 @@ test('State values', () => {
   assert.equal(boardState('needs decision'), 'decision');
   assert.equal(boardState('Blocked (on the API team)'), 'blocked');
   assert.equal(boardState('Stopped (handed off 10:10, needs a restart: /lane b)'), 'stopped');
-  assert.equal(boardState('Thinking'), null);
+  assert.equal(boardState('Handing off'), 'handoff');
+  assert.equal(boardState('handed off 17:14'), 'handoff');
+  assert.equal(boardState('Thinking'), 'other');
   assert.equal(boardState(''), null);
 });
 

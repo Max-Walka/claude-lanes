@@ -77,3 +77,9 @@ test('merge-order labels', async () => {
   assert.deepEqual(u.labels, { 5: 'Pay by card', 7: 'Search' });
   assert.deepEqual(normaliseUpdate({ kind: 'merge-order', labels: ['no'] }).labels, {});
 });
+
+test('update tags: trimmed, lower case, unique', () => {
+  const u = normaliseUpdate({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'todo', text: 'x', tags: ['Urgent', ' blocking ', 'urgent', ''] }, 0);
+  assert.deepEqual(u.tags, ['urgent', 'blocking']);
+  assert.deepEqual(normaliseUpdate({ ts: '2026-01-01T00:00:00Z', from: 'Coordinator', kind: 'info', text: 'x' }, 0).tags, []);
+});

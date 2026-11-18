@@ -11,7 +11,7 @@ import {
   SESSIONS, parseLaneStatus, parseBoard, readField, parseJsonl, normaliseUpdate, normaliseAnswer,
   sortNewestFirst, needsYou, trackedPrs, localIso, sessionKey,
 } from './lib/parse.js';
-import { fetchPrStates, fetchOpenMine } from './lib/gh.js';
+import { fetchPrStates } from './lib/gh.js';
 import { findModels } from './lib/models.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -92,7 +92,7 @@ const projectState = projects.map(() => ({
   prs: {},
   prsFetchedAt: null,
   prsFetching: null,
-  prsError: false,
+  prsError: null,
   clients: new Set(),
   watcher: null,
   lastPrSet: '',
@@ -164,7 +164,7 @@ async function buildState(i) {
     prList,
     prs: s.prs,
     prsFetchedAt: s.prsFetchedAt,
-    openMine: s.openMine ?? null,
+    prsError: s.prsError ?? null,
     models: SHOW_MODELS ? models : {},
     prsFetching: !!s.prsFetching,
     now: Date.now(),
@@ -202,12 +202,14 @@ async function refreshPrs(i) {
       if (projects[i].prStateFile) {
         const demo = JSON.parse(await fsp.readFile(projects[i].prStateFile, 'utf8'));
         s.prs = Object.fromEntries(list.map((n) => [n, demo.prs?.[n] ? { ok: true, number: n, ...demo.prs[n] } : { ok: false, number: n }]));
-        s.openMine = demo.openMine ?? null;
+        s.prsError = null;
       } else {
-        [s.prs, s.openMine] = await Promise.all([fetchPrStates(list, projects[i].repoFolder), fetchOpenMine(projects[i].repoFolder).catch(() => null)]);
+        const res = await fetchPrStates(list, projects[i].repoFolder);
+        s.prs = res.prs;
+        s.prsError = res.error;
       }
     } catch {
-      s.prs = Object.fromEntries(list.map((n) => [n, { ok: false, number: n }]));
+      s.prsError = 'GitHub lookup failed';
     }
     s.prsFetchedAt = Date.now();
   })();
