@@ -453,6 +453,30 @@ button { font: inherit; color: inherit; }
 .sdot.s-blocked { background: var(--warn); }
 .sdot.s-missing { background: var(--text-3); }
 
+/* Live status from Claude Code hooks: Working, Waiting for you, Idle, Error, with "since hh:mm". */
+.live-chip { display: inline-flex; align-items: center; gap: 5px; justify-self: start; max-width: 100%; font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.live-chip .live-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--text-3); }
+.live-chip .live-label { font-weight: 600; }
+.live-chip .live-since { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.live-chip.live-working .live-dot { background: var(--ok); animation: pulse 1.6s ease-in-out infinite; }
+.live-chip.live-working .live-label { color: var(--ok); }
+.live-chip.live-waiting { background: var(--accent-soft); }
+.live-chip.live-waiting .live-dot { background: var(--accent); }
+.live-chip.live-waiting .live-label { color: var(--accent); }
+.live-chip.live-error { background: var(--bad-soft); }
+.live-chip.live-error .live-dot { background: var(--bad); }
+.live-chip.live-error .live-label { color: var(--bad); }
+/* Waiting for you for over two minutes: the chip and the card stand out. */
+.live-chip.live-urgent { background: var(--bad); }
+.live-chip.live-urgent .live-dot { background: var(--accent-text); animation: pulse 1.2s ease-in-out infinite; }
+.live-chip.live-urgent .live-label, .live-chip.live-urgent .live-since { color: var(--accent-text); }
+.scard.live-urgent-card { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 25%, transparent); }
+@media (prefers-reduced-motion: reduce) { .live-chip .live-dot { animation: none !important; } }
+.live-other { display: grid; gap: 4px; padding: 6px 10px; font-size: 12px; }
+.live-other .k { color: var(--text-3); }
+.live-other-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.live-other-row .name { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .activity-list { display: grid; gap: 0; }
 .act { display: grid; gap: 2px; padding: 7px 8px; border-radius: 8px; border: 0; background: none; text-align: left; cursor: pointer; width: 100%; color: var(--text); }
 .act:hover { background: var(--surface); }

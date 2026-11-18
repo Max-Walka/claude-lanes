@@ -1280,12 +1280,44 @@ function openPrCount(key) {
   return prNums(st.fields?.['Open PRs']).filter((n) => !isGone(n)).length;
 }
 
+// Live status from Claude Code hooks (scripts/lane-hook.mjs), as it happens:
+// Working, Waiting for you, Idle or Error, with the time it started.
+const LIVE_LABELS = { working: 'Working', waiting: 'Waiting for you', idle: 'Idle', error: 'Error' };
+const LIVE_URGENT_MS = 2 * 60 * 1000; // waiting longer than this stands out
+
+function liveFor(key) {
+  const l = state.live?.byKey?.[key];
+  return l && LIVE_LABELS[l.status] ? l : null;
+}
+const liveUrgent = (l) => !!l && l.status === 'waiting' && Date.now() - l.since > LIVE_URGENT_MS;
+
+function liveChip(l) {
+  if (!l) return null;
+  const urgent = liveUrgent(l);
+  const since = `since ${fmtTime(l.since)}${urgent ? `, ${fmtDuration(Date.now() - l.since)}` : ''}`;
+  return h('div', { class: `live-chip live-${l.status}${urgent ? ' live-urgent' : ''}`, title: [l.detail, `Last hook event ${fmtTime(l.at)}`].filter(Boolean).join('. ') },
+    h('span', { class: 'live-dot', 'aria-hidden': 'true' }),
+    h('span', { class: 'live-label' }, LIVE_LABELS[l.status]),
+    h('span', { class: 'live-since' }, since));
+}
+
+// Sessions whose folder is no lane and no project's repoFolder.
+function liveOther() {
+  const other = (state.live?.other || []).filter((l) => LIVE_LABELS[l.status]);
+  if (!other.length) return null;
+  return h('div', { class: 'live-other' },
+    h('div', { class: 'k' }, 'Other sessions'),
+    other.map((l) => h('div', { class: 'live-other-row', title: l.cwd }, h('span', { class: 'name' }, l.folder), liveChip(l))));
+}
+
 function renderSessions() {
   const focused = document.activeElement?.closest?.('#session-cards [data-card]')?.dataset.card;
+  const other = liveOther();
   $('#session-cards').replaceChildren(...SESSIONS.map((s) => {
     const ss = sessionStatus(s.key);
     const st = state.sessions[s.key];
     const n = openPrCount(s.key);
+    const lv = liveFor(s.key);
     const foot = [n == null ? null : n === 1 ? '1 open PR' : `${n} open PRs`, ss.stale ? `quiet ${fmtAgo(st.mtime)}` : null].filter(Boolean).join(' · ');
     // Boards with the new fields expand in place; older boards and the coordinator open the drawer.
     const expandable = s.key !== 'coordinator' && hasBoard(st);
@@ -1295,14 +1327,17 @@ function renderSessions() {
       type: 'button', class: 'scard-main', dataset: { card: s.key },
       onclick: () => { if (!expandable) return openDrawer(s.key); open ? expanded.delete(id) : expanded.add(id); renderSessions(); },
       'aria-expanded': expandable ? String(open) : null,
-      'aria-label': `${s.name}: ${ss.label}. ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
+      'aria-label': `${s.name}: ${ss.label}.${lv ? ` Live: ${LIVE_LABELS[lv.status]} since ${fmtTime(lv.since)}.` : ''} ${expandable ? (open ? 'Hide details' : 'Show details') : 'Open details'}`,
     },
       h('div', { class: 'scard-head' }, h('span', { class: `sdot ${ss.cls}`, 'aria-hidden': 'true' }), h('span', { class: 'name' }, s.name), state.models?.[s.name] ? h('span', { class: 'smodel', title: `Runs ${state.models[s.name].model}. Change it with /model in its terminal.` }, state.models[s.name].label) : null, ss.stale ? h('span', { class: 'stale-chip', title: `Board not updated for ${fmtAgo(st.mtime).replace(/ ago$/, '')}` }, 'stale') : null, h('span', { class: `state ${ss.cls}` }, ss.label)),
+      liveChip(lv),
       h('div', { class: 'scard-now' }, noEmDash(nowLine(s.key))),
       stateLine(s.key, ss),
       foot ? h('div', { class: 'scard-foot' }, foot) : null);
-    return h('div', { class: `scard ${ss.cls} ${ss.stale && !open && ss.cls !== 's-restart' ? 'stale' : ''} ${open ? 'open' : ''}` }, main, open ? laneDetails(s.key) : null);
-  }));
+    // A session that reports live through hooks is not faded for a quiet board.
+    const fade = ss.stale && !lv && !open && ss.cls !== 's-restart';
+    return h('div', { class: `scard ${ss.cls} ${fade ? 'stale' : ''} ${open ? 'open' : ''} ${liveUrgent(lv) ? 'live-urgent-card' : ''}` }, main, open ? laneDetails(s.key) : null);
+  }), ...(other ? [other] : []));
   if (focused) document.querySelector(`#session-cards [data-card="${focused}"]`)?.focus();
 }
 

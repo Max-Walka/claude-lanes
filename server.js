@@ -13,6 +13,7 @@ import {
 } from './lib/parse.js';
 import { fetchPrStates } from './lib/gh.js';
 import { findModels } from './lib/models.js';
+import { createLiveStore } from './lib/live.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -57,6 +58,10 @@ if (!projects.length) {
   process.exit(1);
 }
 const PORT = Number(process.env.PORT || config.port || 4317);
+// Live session status from Claude Code hooks (scripts/lane-hook.mjs posts to /api/session-event).
+// Kept in memory; every event is also appended to logs/sessions.jsonl next to config.json.
+const live = createLiveStore({ projects, logFile: path.join(configDir, 'logs', 'sessions.jsonl') });
+const MAX_EVENT_BODY = 64 * 1024;
 // Each session's model, read from Claude Code's transcripts. "showModels": false turns it off;
 // "transcriptsFolder" points elsewhere than ~/.claude/projects.
 const SHOW_MODELS = config.showModels !== false;
@@ -204,10 +209,18 @@ async function refreshState(i, { force = false } = {}) {
   return s.payload;
 }
 
+// The cached payload plus the live session status, which changes without any file changing.
+function withLive(i) {
+  const s = projectState[i];
+  s.payload.live = live.forProject(i);
+  s.payload.now = Date.now();
+  return s.payload;
+}
+
 function broadcast(i) {
   const s = projectState[i];
   if (!s.payload) return;
-  const data = `event: state\ndata: ${JSON.stringify(s.payload)}\n\n`;
+  const data = `event: state\ndata: ${JSON.stringify(withLive(i))}\n\n`;
   for (const res of s.clients) res.write(data);
 }
 
@@ -395,13 +408,15 @@ function projectIndex(url) {
   return Number.isInteger(i) && projects[i] ? i : null;
 }
 
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
+    // Too large by its own Content-Length: answer 413 without reading it.
+    if (Number(req.headers['content-length']) > max) { reject(Object.assign(new Error('Too large'), { status: 413 })); return; }
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(Object.assign(new Error('Too large'), { status: 413 })); req.destroy(); return; }
+      if (size > max) { reject(Object.assign(new Error('Too large'), { status: 413 })); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
@@ -431,7 +446,7 @@ const server = http.createServer(async (req, res) => {
       const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
       req.on('close', () => { clearInterval(ping); s.clients.delete(res); });
       await refreshState(i, { force: !s.payload });
-      res.write(`event: state\ndata: ${JSON.stringify(s.payload)}\n\n`);
+      res.write(`event: state\ndata: ${JSON.stringify(withLive(i))}\n\n`);
       if (!s.prsFetchedAt || Date.now() - s.prsFetchedAt > PR_REFRESH_MS) refreshPrs(i).catch(logErr);
       return;
     }
@@ -439,7 +454,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/state' && req.method === 'GET') {
       const i = projectIndex(url);
       if (i == null) return send(res, 404, { error: 'Unknown project' });
-      return send(res, 200, await refreshState(i));
+      await refreshState(i);
+      return send(res, 200, withLive(i));
     }
 
     if (url.pathname === '/api/doc' && req.method === 'GET') {
@@ -463,6 +479,16 @@ const server = http.createServer(async (req, res) => {
       if (i == null) return send(res, 404, { error: 'Unknown project' });
       refreshPrs(i).catch(logErr);
       return send(res, 202, { ok: true });
+    }
+
+    // From scripts/lane-hook.mjs: one Claude Code hook event. Localhost only, like everything here.
+    if (url.pathname === '/api/session-event' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse(await readBody(req, MAX_EVENT_BODY)); } catch (e) { return send(res, e.status || 400, { error: e.status ? 'Too large' : 'Bad JSON' }); }
+      const r = live.handle(body);
+      if (r.error) return send(res, r.status, { error: r.error });
+      if (r.changed) projects.forEach((_, i) => broadcast(i));
+      return send(res, 200, { ok: true, lane: r.record?.key ?? null, status: r.record?.status ?? null });
     }
 
     if (url.pathname === '/api/answer' && req.method === 'POST') {
